@@ -1,0 +1,830 @@
+---
+title: "The Smith Chart"
+subtitle: "What it is, why it exists, and how to actually use one"
+author: "Patrick Finnerty"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    toc-location: left
+    number-sections: true
+    code-fold: show
+    code-tools: true
+    fig-align: center
+    theme: cosmo
+    css: styles.css
+execute:
+  echo: true
+  warning: false
+  cache: false
+jupyter: python3
+---
+
+```{python}
+#| echo: false
+#| label: setup
+import matplotlib.pyplot as plt
+import numpy as np
+
+import smithlib as sm
+from smithlib.chart import SmithChart
+from smithlib import geometry as geo
+from smithlib import style as S
+from smithlib.matching import (l_match, single_stub_match, quarter_wave_match,
+                               format_component)
+
+plt.rcParams.update({
+    "figure.facecolor": S.SURFACE,
+    "savefig.facecolor": S.SURFACE,
+    "font.size": 10,
+    "axes.edgecolor": S.GRID_MAJOR,
+    "text.color": S.INK,
+})
+
+Z0 = 50.0
+```
+
+# The problem the chart solves
+
+At RF, the thing you care about is almost never a single number. It is an
+**impedance** $Z = R + jX$ — a complex number that changes with frequency, and
+that changes *again* every time you move along a piece of coax. You need to
+answer questions like:
+
+- My antenna measures $25 - j40\,\Omega$. How bad is that?
+- If I put 8 cm of cable in front of it, what does my amplifier see?
+- What two components turn it into $50\,\Omega$?
+
+You could do all of this with algebra. People did, and it was miserable, because
+the impedance plane is **infinite**: $R$ runs from 0 to $\infty$ and $X$ from
+$-\infty$ to $+\infty$. You cannot draw it, so you cannot *see* the answer.
+
+Philip Smith's insight (1939) was to stop plotting impedance and start plotting
+the **reflection coefficient** instead:
+
+$$\Gamma = \frac{Z - Z_0}{Z + Z_0} = \frac{z - 1}{z + 1}, \qquad z = \frac{Z}{Z_0}$$
+
+where $z$ is the impedance *normalized* to the system reference $Z_0$ (almost
+always $50\,\Omega$). This transformation takes the entire infinite right-half
+impedance plane and folds it into a **disc of radius 1**. Every passive load
+that exists lands somewhere inside that circle.
+
+```{python}
+#| echo: false
+#| label: fig-mapping
+#| fig-cap: "The same six loads, drawn twice. Left: the impedance plane, where three of them are off the edge of the page. Right: the Smith chart, where all six fit and the pattern is obvious."
+#| fig-width: 11
+#| fig-height: 5.4
+
+loads = [25 - 40j, 100 + 0j, 50 + 0j, 10 + 5j, 300 + 120j, 50 - 200j]
+names = ["A", "B", "C", "D", "E", "F"]
+
+fig, (axL, axR) = plt.subplots(1, 2, figsize=(11, 5.4))
+
+# --- left: the impedance plane -------------------------------------------
+axL.axhline(0, color=S.GRID_AXIS, lw=0.9)
+axL.axvline(0, color=S.GRID_AXIS, lw=0.9)
+axL.set_xlim(0, 160); axL.set_ylim(-120, 120)
+axL.set_xlabel(r"$R$  [$\Omega$]"); axL.set_ylabel(r"$X$  [$\Omega$]")
+axL.set_title("impedance plane — unbounded", fontsize=11)
+axL.grid(True, color=S.GRID_MINOR, lw=0.6)
+axL.set_facecolor(S.SURFACE)
+for Z, n in zip(loads, names):
+    if Z.real <= 160 and abs(Z.imag) <= 120:
+        axL.plot(Z.real, Z.imag, "o", ms=7, color=S.SERIES[0],
+                 mec=S.SURFACE, mew=1.4)
+        axL.annotate(n, (Z.real, Z.imag), xytext=(7, 6),
+                     textcoords="offset points", fontsize=10, color=S.INK)
+    else:
+        axL.annotate(f"{n} — off the page\n({Z.real:.0f}{Z.imag:+.0f}j)",
+                     (155, np.clip(Z.imag, -110, 110)), ha="right",
+                     fontsize=8.5, color=S.SERIES[1])
+
+# --- right: the same loads on the chart ----------------------------------
+sc = SmithChart(ax=axR, z0=Z0)
+sc.grid()
+axR.set_title("Smith chart — everything fits", fontsize=11)
+for Z, n in zip(loads, names):
+    sc.point(Z / Z0, n, color=S.SERIES[0])
+plt.tight_layout()
+plt.show()
+```
+
+The chart is not an approximation, and it is not a chart in the "look up a value
+in a table" sense. It is an exact, invertible, one-to-one map. Nothing is lost.
+What is *gained* is that the three operations you perform constantly — adding a
+series part, adding a shunt part, adding a length of line — all become simple
+motions along printed curves.
+
+# The anatomy of the chart
+
+Learn these landmarks and most of the chart is already readable.
+
+```{python}
+#| echo: false
+#| label: fig-anatomy
+#| fig-cap: "The landmarks. The horizontal line is purely resistive; everything above it is inductive, everything below is capacitive. The rim is |Γ| = 1: pure reactance, total reflection."
+#| fig-width: 8.4
+#| fig-height: 8.4
+
+sc = SmithChart(figsize=(8.4, 8.4), z0=Z0)
+sc.grid()
+
+sc.point(1 + 0j, "MATCHED\n$z=1$, $\\Gamma=0$", color=S.C_TARGET,
+         offset=(0.0, 0.30))
+sc.point(0 + 0j, "SHORT\n$z=0$, $\\Gamma=-1$", color=S.SERIES[1],
+         offset=(0.30, -0.16))
+sc.point(np.inf, "OPEN\n$z=\\infty$, $\\Gamma=+1$", color=S.SERIES[1],
+         offset=(-0.34, -0.16))
+sc.point(0 + 1j, "$z = j1$\npure inductor", color=S.SERIES[0],
+         offset=(0.28, -0.20))
+sc.point(0 - 1j, "$z = -j1$\npure capacitor", color=S.SERIES[0],
+         offset=(0.28, 0.20))
+
+sc.ax.text(-0.34, 0.52, "INDUCTIVE  ($X > 0$)", ha="center",
+           fontsize=10.5, color=S.INK_SOFT, style="italic")
+sc.ax.text(-0.34, -0.52, "CAPACITIVE  ($X < 0$)", ha="center",
+           fontsize=10.5, color=S.INK_SOFT, style="italic")
+sc.ax.text(-0.30, 0.045, "purely resistive axis", ha="center", fontsize=9,
+           color=S.INK_SOFT,
+           bbox=dict(boxstyle="round,pad=0.2", fc=S.SURFACE, ec="none",
+                     alpha=0.9))
+sc.callout("the rim: $|\\Gamma| = 1$\nall the power comes back",
+           xy=(np.cos(np.radians(143)), np.sin(np.radians(143))),
+           xytext=(-0.36, 0.84), color=S.INK_SOFT, ha="center")
+# The |Gamma| arrow lives in the lower right, which is otherwise empty.  Its
+# label carries no leader -- the arrow already points straight at it.
+sc.ax.annotate("", xy=(0.46, -0.46), xytext=(0, 0),
+               arrowprops=dict(arrowstyle="-|>", color=S.INK_SOFT, lw=1.5))
+sc.callout("distance from centre\n$=|\\Gamma|=$ how badly mismatched",
+           xy=(0.46, -0.46), xytext=(0.74, -0.63), color=S.INK_SOFT,
+           ha="center", arrow=False)
+plt.show()
+```
+
+| Where you are | What it means |
+|---|---|
+| Dead centre | $Z = Z_0$. Perfectly matched, $\Gamma = 0$, VSWR 1:1. |
+| Far left | Short circuit. $\Gamma = -1$. |
+| Far right | Open circuit. $\Gamma = +1$. |
+| On the rim | Purely reactive. All incident power is reflected. |
+| Above the axis | Inductive ($+jX$). |
+| Below the axis | Capacitive ($-jX$). |
+| Horizontal axis | Purely resistive. Left of centre $R < Z_0$; right of centre $R > Z_0$. |
+
+: Landmarks {.striped}
+
+## The two families of curves
+
+The printed grid is two families of circles, and they come straight out of the
+algebra of $\Gamma = (z-1)/(z+1)$.
+
+```{python}
+#| echo: false
+#| label: fig-grid-families
+#| fig-cap: "The grid, taken apart. Left: constant-resistance circles — all tangent at the open-circuit point. Right: constant-reactance arcs — all emanating from that same point."
+#| fig-width: 11
+#| fig-height: 5.6
+
+fig, (a1, a2) = plt.subplots(1, 2, figsize=(11, 5.6))
+
+s1 = SmithChart(ax=a1, z0=Z0)
+a1.plot(*(lambda g: (g.real, g.imag))(geo.unit_circle()),
+        color=S.RIM, lw=S.LW_RIM)
+a1.plot([-1, 1], [0, 0], color=S.GRID_AXIS, lw=0.9)
+for r, lab in [(0.2, "r=0.2"), (0.5, "r=0.5"), (1.0, "r=1"), (2.0, "r=2"),
+               (5.0, "r=5")]:
+    c = geo.resistance_circle(r)
+    a1.plot(c.real, c.imag, color=S.SERIES[0], lw=1.6)
+    g = sm.gamma_from_z(r + 0j)
+    a1.annotate(lab, (g.real, g.imag), xytext=(0, -14),
+                textcoords="offset points", fontsize=8.5, ha="center",
+                color=S.INK,
+                bbox=dict(boxstyle="round,pad=0.18", fc=S.SURFACE,
+                          ec=S.SERIES[0], lw=0.8))
+a1.set_title("constant resistance $r$", fontsize=11)
+a1.text(0, -1.05, "circles: centre $\\frac{r}{1+r}$, radius $\\frac{1}{1+r}$",
+        ha="center", fontsize=9, color=S.INK_SOFT)
+
+s2 = SmithChart(ax=a2, z0=Z0)
+a2.plot(*(lambda g: (g.real, g.imag))(geo.unit_circle()),
+        color=S.RIM, lw=S.LW_RIM)
+a2.plot([-1, 1], [0, 0], color=S.GRID_AXIS, lw=0.9)
+for x in (0.2, 0.5, 1.0, 2.0, 5.0):
+    for sgn in (+1, -1):
+        arc = geo.reactance_arc(sgn * x)
+        a2.plot(arc.real, arc.imag, color=S.SERIES[1], lw=1.6)
+        g = sm.gamma_from_z(0 + 1j * sgn * x)
+        u = g / abs(g)
+        a2.annotate(f"x={sgn*x:g}", ((g + 0.1 * u).real, (g + 0.1 * u).imag),
+                    fontsize=8, ha="center", va="center", color=S.INK,
+                    bbox=dict(boxstyle="round,pad=0.15", fc=S.SURFACE,
+                              ec=S.SERIES[1], lw=0.8))
+a2.set_title("constant reactance $x$", fontsize=11)
+a2.text(0, -1.05, "arcs: centre $1 + j\\frac{1}{x}$, radius $\\frac{1}{|x|}$",
+        ha="center", fontsize=9, color=S.INK_SOFT)
+plt.tight_layout()
+plt.show()
+```
+
+Every point on the chart is the intersection of one circle from each family. To
+read a point, read off its $r$ and its $x$, then multiply by $Z_0$:
+
+```{python}
+z = 0.5 - 0.8j                 # read straight off the grid
+Z = z * Z0
+g = sm.gamma_from_z(z)
+print(f"z      = {z}")
+print(f"Z      = {Z.real:.1f} {Z.imag:+.1f}j ohm")
+print(f"Gamma  = {abs(g):.3f} at {np.degrees(np.angle(g)):.1f} deg")
+print(f"VSWR   = {sm.vswr(g):.2f}")
+print(f"RL     = {sm.return_loss_db(g):.1f} dB")
+```
+
+# The three moves
+
+This is the part that makes the chart a *tool* rather than a picture. There are
+only three things you can do to an impedance, and each one is a specific,
+predictable motion on the chart.
+
+```{python}
+#| echo: false
+#| label: fig-three-moves
+#| fig-cap: "The complete vocabulary. A series element slides along a constant-r circle; a shunt element slides along a constant-g circle; a length of line rotates about the centre. Arrowheads show the direction of travel."
+#| fig-width: 14
+#| fig-height: 5.0
+
+z_start = 0.5 - 0.8j
+fig, axs = plt.subplots(1, 3, figsize=(14, 5.0))
+
+# 1. series element -------------------------------------------------------
+sa = SmithChart(ax=axs[0], z0=Z0)
+sa.grid(labels=False)
+axs[0].set_title("series element\n→ ride the constant-$r$ circle",
+                 fontsize=11, color=S.C_SERIES_EL)
+z_end = z_start + 1.3j
+c = geo.resistance_circle(z_start.real)
+axs[0].plot(c.real, c.imag, color=S.C_SERIES_EL, lw=1.0, alpha=0.4, ls="--")
+sa.point(z_start, "start", color=S.C_LOAD, offset=(0.30, -0.16))
+sa.move(z_start, z_end, kind="resistance", label="+ series $L$", arrows=2,
+        label_offset=(-0.34, -0.05))
+sa.point(z_end, "end", color=S.C_SERIES_EL, offset=(0.18, 0.24))
+axs[0].text(0, -1.10, "$r$ cannot change — only $x$ moves",
+            ha="center", fontsize=9, color=S.INK_SOFT)
+
+# 2. shunt element --------------------------------------------------------
+sb = SmithChart(ax=axs[1], z0=Z0)
+sb.grid(labels=False)
+axs[1].set_title("shunt element\n→ ride the constant-$g$ circle",
+                 fontsize=11, color=S.C_SHUNT_EL)
+y_start = 1 / z_start
+z_end2 = 1 / (y_start + 1.6j)
+cc = geo.conductance_circle(y_start.real)
+axs[1].plot(cc.real, cc.imag, color=S.C_SHUNT_EL, lw=1.0, alpha=0.4, ls="--")
+sb.point(z_start, "start", color=S.C_LOAD, offset=(0.32, 0.10))
+sb.move(z_start, z_end2, kind="conductance", label="+ shunt $C$", arrows=2,
+        label_offset=(0.10, 0.30))
+sb.point(z_end2, "end", color=S.C_SHUNT_EL, offset=(-0.22, -0.22))
+axs[1].text(0, -1.10, "$g$ cannot change — only $b$ moves",
+            ha="center", fontsize=9, color=S.INK_SOFT)
+
+# 3. transmission line ----------------------------------------------------
+scc = SmithChart(ax=axs[2], z0=Z0)
+scc.grid(labels=False)
+axs[2].set_title("length of line\n→ rotate about the centre",
+                 fontsize=11, color=S.C_LINE)
+scc.vswr_circle(sm.vswr(sm.gamma_from_z(z_start)), color=S.C_LINE, ls="--",
+                lw=1.0)
+scc.point(z_start, "load", color=S.C_LOAD, offset=(0.32, -0.12))
+z_end3 = scc.line_sweep(z_start, 0.18, label="0.18 $\\lambda$ of line",
+                        arrows=2)
+scc.point(z_end3, "what the\nsource sees", color=S.C_LINE, offset=(0.34, 0.14))
+scc.rotation_arrow(start_deg=62, sweep_deg=-52)
+axs[2].text(0, -1.10, "$|\\Gamma|$ cannot change — only its angle",
+            ha="center", fontsize=9, color=S.INK_SOFT)
+plt.tight_layout()
+plt.show()
+```
+
+## Move 1 — a series element
+
+Putting a component *in series* changes $X$ and leaves $R$ alone. So you slide
+along the constant-$r$ circle you are already on.
+
+- **Series inductor** → $x$ increases → move **clockwise** (upward).
+- **Series capacitor** → $x$ decreases → move **counter-clockwise** (downward).
+
+## Move 2 — a shunt element
+
+Putting a component *in parallel* changes $B$ and leaves $G$ alone — but $G$ and
+$B$ are admittance, and the printed grid is impedance. The fix is the chart's
+most elegant property: **the admittance chart is the impedance chart rotated
+180°**. So a shunt element slides along a *mirrored* circle.
+
+- **Shunt capacitor** → $b$ increases → move **clockwise** on the $g$-circle.
+- **Shunt inductor** → $b$ decreases → move **counter-clockwise**.
+
+In practice you either overlay a $Y$-grid (a "ZY" or Smith–Carter chart), or you
+mentally flip through the centre. `smithlib` just does the arithmetic:
+
+```{python}
+#| label: fig-yz
+#| fig-cap: "The impedance point and its admittance are the same distance from the centre, on exactly opposite sides. Reflecting through the centre is how a shunt element gets handled on an impedance grid."
+sc_demo = SmithChart(figsize=(7.0, 7.0), z0=Z0,
+                     title="the $Y$ grid is the $Z$ grid, rotated $180°$")
+sc_demo.grid()
+sc_demo.admittance_grid(alpha=0.45)
+z_a = 0.5 - 0.8j
+sc_demo.point(z_a, "$z = 0.5 - j0.8$", color=S.C_LOAD, offset=(-0.34, -0.16))
+sc_demo.point(1 / z_a, "$y = 1/z$\n(same point,\nother grid)",
+              color=S.ACCENT, offset=(0.20, 0.26))
+sc_demo.ax.plot([sm.gamma_from_z(z_a).real, sm.gamma_from_z(1 / z_a).real],
+                [sm.gamma_from_z(z_a).imag, sm.gamma_from_z(1 / z_a).imag],
+                color=S.ACCENT, lw=1.2, ls=":", zorder=4)
+# Marking the centre makes it obvious the dotted line runs straight through it.
+sc_demo.ax.plot([0], [0], "+", ms=13, mew=1.8, color=S.INK, zorder=6)
+sc_demo.ax.annotate("centre", (0, 0), xytext=(10, -14),
+                    textcoords="offset points", fontsize=8.5, color=S.INK_SOFT)
+plt.show()
+```
+
+Note that the $z \rightarrow y$ point is the *diametric opposite* through the
+centre. That is the whole trick.
+
+## Move 3 — a length of transmission line
+
+Adding line does not change $|\Gamma|$ on a lossless cable. It only **rotates**
+it. Moving *toward the generator* (away from the load) rotates **clockwise**:
+
+$$\Gamma(d) = \Gamma_L \, e^{-j2\beta d}$$
+
+The factor of 2 is why **half a wavelength is one full revolution** — the wave
+goes down and comes back. That is also why chart rims are labelled 0 → 0.5
+wavelengths, and why a half-wave line is an impedance repeater:
+
+```{python}
+z_load = 0.5 - 0.8j
+for d in [0.0, 0.125, 0.25, 0.375, 0.5]:
+    z_in = sm.line_input_z(z_load, d)
+    print(f"{d:5.3f} lambda  ->  z = {z_in.real:6.3f} {z_in.imag:+6.3f}j")
+```
+
+A quarter wave lands you at $1/z$ — the impedance *inverter*, and the reason
+quarter-wave transformers work at all.
+
+On a **lossy** line the locus spirals inward instead of closing, because
+$|\Gamma|$ decays as $e^{-2\alpha d}$. Long enough cable makes anything look
+matched, which is a trap worth seeing once:
+
+```{python}
+#| label: fig-lossy
+#| fig-cap: "A badly mismatched load seen through two wavelengths of lossy cable. The spiral toward the centre is not a better antenna — it is the cable eating your reflected power."
+#| fig-width: 7.2
+#| fig-height: 7.2
+
+sc_l = SmithChart(figsize=(7.2, 7.2), z0=Z0,
+                  title="lossy line: the mismatch *looks* like it improves")
+sc_l.grid()
+sc_l.vswr_circle(sm.vswr(sm.gamma_from_z(z_load)), label="lossless VSWR")
+sc_l.point(z_load, "load", color=S.C_LOAD, offset=(-0.30, -0.18))
+z_far = sc_l.line_sweep(z_load, 2.0, alpha_np_per_wl=0.18, arrows=3,
+                        label="2 $\\lambda$ of lossy cable")
+sc_l.point(z_far, "at the\nsource end", color=S.C_LINE, offset=(0.26, 0.20))
+sc_l.legend()
+plt.show()
+```
+
+# Reading a mismatch: VSWR and return loss
+
+Distance from the centre *is* the mismatch. Every circle centred on the origin
+is a constant-VSWR circle, and each corresponds to one return-loss figure.
+
+```{python}
+#| label: fig-vswr
+#| fig-cap: "Constant-VSWR circles. A typical 'return loss better than 10 dB' specification is the shaded disc — anything landing inside it passes."
+#| fig-width: 7.4
+#| fig-height: 7.4
+
+sc_v = SmithChart(figsize=(7.4, 7.4), z0=Z0, title="how bad is this mismatch?")
+sc_v.grid()
+sc_v.shade_gamma(10 ** (-10 / 20), alpha=0.13)     # RL >= 10 dB
+for s_ in (1.5, 2.0, 3.0, 5.0):
+    sc_v.vswr_circle(s_)
+    mag = (s_ - 1) / (s_ + 1)
+    sc_v.ax.annotate(f"VSWR {s_:g}\n({sm.return_loss_db(mag):.1f} dB RL)",
+                     xy=(mag * np.cos(np.radians(118)),
+                         mag * np.sin(np.radians(118))),
+                     fontsize=8, ha="center", va="center", color=S.INK,
+                     bbox=dict(boxstyle="round,pad=0.2", fc=S.SURFACE,
+                               ec=S.INK_MUTED, lw=0.7, alpha=0.92))
+sc_v.ax.text(0, -0.62, "shaded: $RL \\geq 10$ dB\n(the usual pass/fail disc)",
+             ha="center", fontsize=9.5, color=S.C_TARGET)
+sc_v.point(25 - 40j, "our load", color=S.C_LOAD, offset=(0.30, -0.22))
+sc_v.readout((25 - 40j) / Z0)
+plt.show()
+```
+
+```{python}
+for ZL in [50, 75, 25 - 40j, 100 + 100j]:
+    g = sm.gamma_from_Z(ZL, Z0)
+    print(f"ZL = {str(ZL):>12}   |G| = {abs(g):.3f}   VSWR = {sm.vswr(g):5.2f}"
+          f"   RL = {sm.return_loss_db(g):5.1f} dB"
+          f"   power reflected = {100*sm.reflected_power_fraction(g):4.1f} %")
+```
+
+# Worked example 1 — matching with an L-network
+
+**The job.** An antenna measures $Z_L = 25 - j40\,\Omega$ at 1 GHz. Match it to
+$50\,\Omega$ with two lumped components.
+
+**The strategy on the chart.** You need to get from the load to the centre. With
+two elements you get two moves, and each move must follow one of the printed
+families. So: ride a circle until you hit a circle that passes through the
+centre, then ride *that* one home. The two circles through the centre are the
+$r = 1$ circle and the $g = 1$ circle, which is why every L-network solution
+looks the same — *hit the unity circle, then run to the middle.*
+
+```{python}
+ZL = 25 - 40j
+f0 = 1e9
+
+solutions = l_match(ZL, Z0, freq_hz=f0)
+for i, m in enumerate(solutions):
+    parts = " then ".join(f"{role} = {txt}" for role, _, _, txt in m.components())
+    print(f"[{i}] {m.topology:14s}  {parts}")
+```
+
+```{python}
+#| echo: false
+#| label: fig-lmatch
+#| fig-cap: "Two of the four L-network solutions, drawn as journeys. Each starts at the load, rides one circle to the unity circle, then rides that circle to the centre. Same destination, different components, different bandwidth."
+#| fig-width: 13.5
+#| fig-height: 6.8
+
+fig, axs = plt.subplots(1, 2, figsize=(13.5, 6.8))
+picks = [solutions[0], solutions[-1]]
+offs = [[(-0.34, 0.02), (-0.34, 0.06)], [(0.34, -0.06), (-0.34, 0.10)]]
+
+for ax, m, off in zip(axs, picks, offs):
+    s = SmithChart(ax=ax, z0=Z0)
+    s.grid(labels=False)
+    # the two "runways" that pass through the centre
+    ax.plot(*(lambda g: (g.real, g.imag))(geo.resistance_circle(1.0)),
+            color=S.C_SERIES_EL, lw=1.1, ls="--", alpha=0.45)
+    ax.plot(*(lambda g: (g.real, g.imag))(geo.conductance_circle(1.0)),
+            color=S.C_SHUNT_EL, lw=1.1, ls="--", alpha=0.45)
+    s.point(m.z_load, "load\n$25 - j40$", color=S.C_LOAD, offset=(0.16, -0.34))
+    s.path(m.steps, m.z_load, offsets=off)
+    s.point(1 + 0j, "$50\\,\\Omega$", color=S.C_TARGET, offset=(0.26, 0.20))
+    txt = "\n".join(f"{role}: {t}" for role, _, _, t in m.components())
+    ax.set_title(f"{m.topology}\n{txt}", fontsize=10.5)
+axs[0].text(0, -1.16, "dashed blue = $r=1$ circle,  dashed orange = $g=1$ circle"
+            "  —  the only two runways into the centre",
+            ha="center", fontsize=9, color=S.INK_SOFT)
+plt.tight_layout()
+plt.show()
+```
+
+Verify it, rather than trusting the picture:
+
+```{python}
+m = solutions[0]
+w = 2 * np.pi * f0
+Zl = ZL
+for role, kind, val, txt in m.components():
+    Xc = 1j * w * val if kind == "L" else 1 / (1j * w * val)
+    if role.startswith("shunt"):
+        Zl = 1 / (1 / Zl + 1 / Xc)
+    else:
+        Zl = Zl + Xc
+    print(f"after {role:9s} ({txt:>8s}):  Z = {Zl.real:7.3f} {Zl.imag:+7.3f}j")
+print(f"\nfinal VSWR = {sm.vswr(sm.gamma_from_Z(Zl, Z0)):.4f}")
+```
+
+## Why there are four answers, and how to choose
+
+The load sits where both topologies are reachable, and each has a high-pass and
+a low-pass version. All four are electrically identical *at 1 GHz* and
+completely different everywhere else.
+
+The classic chart-based guide is **$Q$**. Constant-$Q$ contours are arcs through
+the short and open points, and the relevant number is the $Q$ at the
+*intermediate node* — the corner the path turns at. The load's own $Q$ is the
+same whichever network you pick, so it tells you nothing about the choice.
+
+```{python}
+#| label: fig-q
+#| fig-cap: "The same two solutions against constant-Q contours. The corner where the path turns is what matters: a sharper corner sits on a higher-Q contour."
+#| fig-width: 13.5
+#| fig-height: 6.8
+#| echo: false
+
+fig, axs = plt.subplots(1, 2, figsize=(13.5, 6.8))
+for ax, m in zip(axs, picks):
+    s_ = SmithChart(ax=ax, z0=Z0)
+    s_.grid(labels=False)
+    for q in (1, 2, 3):
+        s_.q_contour(q)
+        arc = geo.q_contour(q)
+        gq = arc[len(arc) // 2]
+        ax.annotate(f"Q={q}", (gq.real, gq.imag), fontsize=7.5,
+                    color=S.ACCENT, ha="center")
+    s_.point(m.z_load, "load", color=S.C_LOAD, offset=(0.16, -0.30))
+    s_.path(m.steps, m.z_load, labels=False)
+    s_.point(m.path[1], "the corner", color=S.ACCENT, offset=(-0.34, 0.04))
+    s_.point(1 + 0j, "", color=S.C_TARGET)
+    ax.set_title(f"{m.topology} — network $Q$ = {m.network_q:.2f}", fontsize=11)
+plt.tight_layout()
+plt.show()
+```
+
+But $Q$ is only a first-order guide, and it is worth seeing exactly how far it
+goes. Build all four networks out of real components and sweep them:
+
+```{python}
+from smithlib.network import (FixedLoad, Network, SeriesC, SeriesL, ShuntC,
+                              ShuntL)
+
+def build(m):
+    """Turn an L-network solution into a network of concrete components."""
+    els = []
+    for role, kind, val, _ in m.components():
+        cls = {("shunt", "L"): ShuntL, ("shunt", "C"): ShuntC,
+               ("series", "L"): SeriesL, ("series", "C"): SeriesC}[
+                   (role.split()[0], kind)]
+        els.append(cls(val))
+    return Network(load=FixedLoad(ZL), elements=els, z0=Z0)
+
+def bandwidth_10db(net, freqs):
+    """Contiguous band around f0 holding >= 10 dB return loss, in MHz."""
+    rl = sm.return_loss_db(sm.gamma_from_Z(net.sweep(freqs), Z0))
+    ok = rl >= 10
+    i0 = int(np.argmin(np.abs(freqs - f0)))
+    if not ok[i0]:
+        return 0.0
+    lo = hi = i0
+    while lo > 0 and ok[lo - 1]:
+        lo -= 1
+    while hi < len(ok) - 1 and ok[hi + 1]:
+        hi += 1
+    return (freqs[hi] - freqs[lo]) / 1e6
+
+fsweep = np.linspace(0.2e9, 2.4e9, 40001)
+for i, mm in enumerate(solutions):
+    parts = ", ".join(t for _, _, _, t in mm.components())
+    print(f"[{i}] {mm.topology:14s}  Q = {mm.network_q:.3f}   "
+          f"BW = {bandwidth_10db(build(mm), fsweep):6.1f} MHz   {parts}")
+```
+
+```{python}
+#| label: fig-bandwidth
+#| fig-cap: "What the sweep actually says. Within each topology both solutions have identical Q, yet their bandwidths differ substantially — because an inductor's reactance rises with frequency while a capacitor's falls, and Q does not know that."
+#| fig-width: 12.5
+#| fig-height: 4.6
+#| echo: false
+
+fig, axs = plt.subplots(1, 2, figsize=(12.5, 4.6), sharey=True)
+by_topo = {}
+for mm in solutions:
+    by_topo.setdefault(mm.topology, []).append(mm)
+
+for ax, (topo, group) in zip(axs, by_topo.items()):
+    for mm, colour in zip(group, S.SERIES[:2]):
+        net = build(mm)
+        rl = sm.return_loss_db(sm.gamma_from_Z(net.sweep(fsweep), Z0))
+        parts = " + ".join(t for _, _, _, t in mm.components())
+        ax.plot(fsweep / 1e9, rl, color=colour, lw=2.0,
+                label=f"{parts}  ({bandwidth_10db(net, fsweep):.0f} MHz)")
+    ax.axhline(10, color=S.C_TARGET, lw=1.3, ls="--")
+    ax.axvline(1.0, color=S.INK_MUTED, lw=1.0, ls=":")
+    ax.set_title(f"{topo}  —  network $Q$ = {group[0].network_q:.2f}",
+                 fontsize=11)
+    ax.set_xlabel("frequency (GHz)")
+    ax.set_ylim(40, 0)
+    ax.grid(True, color=S.GRID_MINOR, lw=0.6)
+    ax.set_facecolor(S.SURFACE)
+    ax.legend(fontsize=8.5, loc="lower right", facecolor=S.SURFACE,
+              edgecolor=S.GRID_MAJOR)
+axs[0].set_ylabel("return loss (dB)")
+axs[0].annotate("10 dB spec", (0.30, 8.4), fontsize=8.5, color=S.C_TARGET,
+                va="bottom")
+plt.tight_layout()
+plt.show()
+```
+
+So the honest rule is narrower than the folklore:
+
+- **$Q$ ranks the geometry.** A load far from the centre forces a sharp corner,
+  a high $Q$, and a narrow match. Nothing you do with two elements escapes
+  that, and the chart shows it at a glance.
+- **$Q$ does not rank the variants.** The high-pass and low-pass versions of one
+  topology share a corner, so they share a $Q$ — but their components drift in
+  opposite directions with frequency, and their real bandwidths differ.
+
+Use the contours to understand *why* a match is hard, then sweep the candidates
+to pick between them. That is precisely what the app's sweep tab is for.
+
+# Worked example 2 — a single-stub tuner
+
+Below roughly a GHz you use lumped parts. Above it, you use **line**. A
+single-stub tuner is two pieces of transmission line and no components at all.
+
+**The strategy on the chart.**
+
+1. Walk from the load toward the generator (clockwise on the constant-VSWR
+   circle) until you land on the $g = 1$ circle. That distance is $d$.
+2. At that point the admittance is $1 + jb$. The real part is already right; you
+   only need to cancel $jb$.
+3. Hang a stub in parallel whose susceptance is exactly $-jb$. An open or
+   shorted piece of line is a pure susceptance, and its length sets the value.
+
+```{python}
+stubs = single_stub_match(ZL, Z0, stub_kind="open", orientation="shunt")
+for s_ in stubs:
+    y_at = 1 / s_.z_at_stub
+    print(f"d = {s_.d_wl:.4f} lambda   ->  y = {y_at.real:.3f} {y_at.imag:+.3f}j"
+          f"   ->  open stub of {s_.l_wl:.4f} lambda")
+```
+
+```{python}
+#| echo: false
+#| label: fig-stub
+#| fig-cap: "Single open-stub tuner. Purple: walk down the line, clockwise, until the g = 1 circle is hit. Orange: the stub slides along that circle to the centre. Both solutions shown."
+#| fig-width: 13.5
+#| fig-height: 6.8
+
+fig, axs = plt.subplots(1, 2, figsize=(13.5, 6.8))
+for ax, st in zip(axs, stubs):
+    s = SmithChart(ax=ax, z0=Z0)
+    s.grid(labels=False)
+    ax.plot(*(lambda g: (g.real, g.imag))(geo.conductance_circle(1.0)),
+            color=S.C_SHUNT_EL, lw=1.3, ls="--", alpha=0.55)
+    ax.annotate("$g=1$ circle", xy=(-0.70, -0.30), fontsize=8.5,
+                color=S.C_SHUNT_EL, ha="center")
+    s.vswr_circle(sm.vswr(sm.gamma_from_Z(ZL, Z0)), lw=1.0)
+    s.point(st.z_load, "load", color=S.C_LOAD, offset=(-0.16, -0.30))
+    s.path(st.steps, st.z_load,
+           offsets=[(0.34, -0.10), (-0.30, 0.18)])
+    s.point(st.z_at_stub, "", color=S.C_LINE)
+    s.point(1 + 0j, "$50\\,\\Omega$", color=S.C_TARGET, offset=(0.26, 0.22))
+    ax.set_title(f"line $d = {st.d_wl:.4f}\\lambda$,  "
+                 f"open stub $\\ell = {st.l_wl:.4f}\\lambda$", fontsize=11)
+plt.tight_layout()
+plt.show()
+```
+
+The stub length itself is also a chart reading. An open stub starts at the
+open-circuit point and walks clockwise around the rim; a shorted stub starts at
+the short-circuit point. Where you stop is the susceptance you get.
+
+```{python}
+#| label: fig-stub-length
+#| fig-cap: "How stub length becomes susceptance. Both stubs walk the rim clockwise; they are the same curve, offset by a quarter wavelength."
+#| fig-width: 11
+#| fig-height: 5.6
+
+fig, axs = plt.subplots(1, 2, figsize=(11, 5.6))
+for ax, kind, start in zip(axs, ("open", "short"), (np.inf, 0 + 0j)):
+    s = SmithChart(ax=ax, z0=Z0)
+    s.grid(labels=False)
+    L = np.linspace(0.001, 0.499, 400)
+    g = sm.gamma_from_z(np.array([sm.stub_input_z(d, kind) for d in L]))
+    ax.plot(g.real, g.imag, color=S.C_SHUNT_EL, lw=3.0, alpha=0.85,
+            solid_capstyle="round")
+    s.point(start, f"{kind}\n$\\ell = 0$", color=S.C_LOAD,
+            offset=(-0.34, -0.20) if kind == "open" else (0.34, -0.20))
+    for d in (0.125, 0.25, 0.375):
+        zz = sm.stub_input_z(d, kind)
+        s.point(zz, f"${d}\\lambda$\n$x={zz.imag:+.2f}$", color=S.C_LINE,
+                fontsize=8)
+    s.rotation_arrow(start_deg=60, sweep_deg=-40, text="increasing $\\ell$")
+    ax.set_title(f"{kind}-circuit stub", fontsize=11)
+plt.tight_layout()
+plt.show()
+```
+
+# Worked example 3 — the quarter-wave transformer
+
+A quarter-wave section of line with characteristic impedance
+$Z_{0,\text{qw}} = \sqrt{Z_0 R_L}$ matches a **real** load $R_L$ to $Z_0$.
+Complex loads need one extra step: first walk down the line to where the
+impedance goes purely real — that is, to the horizontal axis of the chart.
+
+```{python}
+qw = quarter_wave_match(ZL, Z0)
+print(f"walk {qw.d_wl:.4f} lambda to reach a real {qw.R_real:.2f} ohm")
+print(f"then a quarter-wave section of {qw.z0_transformer:.2f} ohm line")
+print(f"check: Z0qw^2 / R = {qw.z0_transformer**2 / qw.R_real:.4f} ohm")
+```
+
+```{python}
+#| echo: false
+#| label: fig-qw
+#| fig-cap: "Quarter-wave transformer on a complex load. Purple: rotate to the real axis. Green: the quarter-wave section carries that real point to the centre."
+#| fig-width: 7.6
+#| fig-height: 7.6
+
+s = SmithChart(figsize=(7.6, 7.6), z0=Z0, title="quarter-wave transformer")
+s.grid()
+s.vswr_circle(sm.vswr(sm.gamma_from_Z(ZL, Z0)), label="load VSWR circle")
+s.point(qw.z_load, "load\n$25-j40$", color=S.C_LOAD, offset=(-0.18, -0.30))
+s.move(qw.z_load, qw.steps[0].z_after, kind="gamma", color=S.C_LINE, arrows=2,
+       label=f"rotate {qw.d_wl:.3f}$\\lambda$", label_offset=(0.36, -0.10))
+s.point(qw.steps[0].z_after, f"purely real\n{qw.R_real:.1f} $\\Omega$",
+        color=S.C_LINE, offset=(-0.10, -0.30))
+s.move(qw.steps[0].z_after, 1 + 0j, kind="gamma", color=S.C_TARGET, arrows=2,
+       label=f"$\\lambda/4$ of {qw.z0_transformer:.1f} $\\Omega$ line",
+       label_offset=(-0.05, 0.34))
+s.point(1 + 0j, "matched", color=S.C_TARGET, offset=(0.30, 0.10))
+s.legend()
+plt.show()
+```
+
+The green arc is drawn as a rotation for readability, but note the honest
+caveat: **inside** a section of different $Z_0$ the locus is a circle centred on
+$Z_{0,\text{qw}}$, not on $Z_0$. It is only the two *endpoints* that are correct
+on a $50\,\Omega$ chart. This is the single most common way to misread a
+transformer on a chart.
+
+# What you actually see on a VNA
+
+Everything so far was single-frequency. A real measurement is a **locus** — the
+load's impedance traced out across a band. Reading that locus is most of what a
+Smith chart gets used for day to day.
+
+```{python}
+#| label: fig-sweep
+#| fig-cap: "A series-RLC resonator swept from 0.7 to 1.3 GHz. The locus crosses the real axis at resonance; how tightly it loops is its Q."
+#| fig-width: 7.6
+#| fig-height: 7.6
+
+R, L, C = 35.0, 8e-9, 3.17e-12          # resonant near 1 GHz
+freqs = np.linspace(0.7e9, 1.3e9, 601)
+
+def z_series_rlc(f):
+    w = 2 * np.pi * f
+    return (R + 1j * (w * L - 1 / (w * C))) / Z0
+
+s = SmithChart(figsize=(7.6, 7.6), z0=Z0,
+               title="series RLC swept 0.7 → 1.3 GHz")
+s.grid()
+s.shade_gamma(10 ** (-10 / 20), alpha=0.12)
+s.frequency_sweep(z_series_rlc, freqs, mark_every=100, label="$S_{11}$ locus")
+f_res = 1 / (2 * np.pi * np.sqrt(L * C))
+s.point(z_series_rlc(f_res), f"resonance\n{f_res/1e9:.3f} GHz",
+        color=S.C_SHUNT_EL, offset=(-0.40, 0.16))
+s.callout("inside the shaded disc\n= better than 10 dB return loss",
+          xy=(0.22, -0.16), xytext=(0.50, -0.76), color=S.C_TARGET,
+          ha="center")
+s.legend()
+plt.show()
+```
+
+Three habits worth building:
+
+- **Which way does the trace go?** Frequency always advances clockwise for a
+  passive network. If your trace goes counter-clockwise, you have a sign error
+  or a de-embedding mistake.
+- **Where does it cross the real axis?** That is resonance.
+- **How big is the loop?** Big loop = high $Q$ = narrowband.
+
+# Cheat sheet
+
+| I want to… | Do this on the chart |
+|---|---|
+| Convert $Z \leftrightarrow \Gamma$ | Just read the position |
+| Get admittance | Reflect through the centre |
+| Add series $L$ | Clockwise along constant $r$ |
+| Add series $C$ | Counter-clockwise along constant $r$ |
+| Add shunt $C$ | Clockwise along constant $g$ |
+| Add shunt $L$ | Counter-clockwise along constant $g$ |
+| Add line toward source | Clockwise about the centre; $\lambda/2$ = full turn |
+| Find VSWR | Radius of the circle through the point |
+| Match with 2 parts | Ride a circle to $r{=}1$ or $g{=}1$, then to the centre |
+| Judge bandwidth | Compare against constant-$Q$ arcs |
+
+: Quick reference {.striped}
+
+**Six things worth memorising**
+
+1. Centre = matched. Rim = totally reflective. Distance from centre = $|\Gamma|$.
+2. Top half inductive, bottom half capacitive.
+3. Admittance is the same point rotated 180°.
+4. Half a wavelength of line = one full lap. Quarter wave = impedance inverter.
+5. Series moves follow $r$-circles; shunt moves follow $g$-circles.
+6. Every two-element match is "get to the unity circle, then get to the centre."
+
+# Where to go next
+
+- Run the interactive app — `streamlit run app/app.py` — and drag a load around
+  while watching VSWR, return loss and the matching solutions update live.
+- Extend `smithlib` with your own two-port work; the maths modules have no
+  plotting dependency, so they drop straight into a measurement script.
+- Real designs use measured S-parameters rather than an ideal $Z_L$;
+  [`scikit-rf`](https://scikit-rf.org) reads Touchstone files and pairs well
+  with everything here.
+
+**References.** Pozar, *Microwave Engineering* (ch. 2 and 5) is the standard
+treatment. Smith's original is *Transmission Line Calculator*, Electronics,
+January 1939.
