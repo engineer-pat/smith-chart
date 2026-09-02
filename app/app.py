@@ -62,30 +62,11 @@ def detect_streamlit_theme():
 if "elements" not in st.session_state:
     st.session_state.elements = []
 
-# The |Gamma| sliders live on the Explore tab but are read by the sidebar,
-# which runs first. Streamlit exposes a widget's value in session_state from
-# the start of the rerun it changed on, so seeding the keys here is enough to
-# let the two halves agree without duplicating the widgets.
-st.session_state.setdefault("gamma_mag", 0.555)
-st.session_state.setdefault("gamma_ang", -93.9)
-
 GAMMA_ENTRY = "|Γ| ∠ θ"
 
 
 def reset_elements():
     st.session_state.elements = []
-
-
-def use_gamma_entry():
-    """Point the sidebar at polar entry, so the Explore sliders take over.
-
-    This has to be a widget callback: Streamlit refuses to let a script assign
-    to a widget's session_state key once that widget has been instantiated,
-    and the sidebar runs before the tabs. Callbacks fire before the next run
-    builds its widgets, so the assignment lands cleanly.
-    """
-    st.session_state.entry_mode = GAMMA_ENTRY
-    st.session_state.load_model = "Fixed Z"
 
 
 # ==========================================================================
@@ -102,28 +83,29 @@ with st.sidebar:
     st.divider()
     st.header("Load")
     load_kind = st.radio(
-        "Model", ["Fixed Z", "Series RLC", "Parallel RLC"], key="load_model",
+        "Model", ["Fixed Z", "Series RLC", "Parallel RLC"],
         help="A fixed impedance is enough for a single-frequency design. "
              "The RLC models give a load that actually changes with "
              "frequency, so the sweep tab means something.",
     )
 
     if load_kind == "Fixed Z":
-        entry = st.selectbox("Enter as", ["R + jX", GAMMA_ENTRY, "VSWR ∠ θ",
-                                          "Series R–L / R–C"],
-                             key="entry_mode")
-        if entry == "R + jX":
+        # Polar entry leads because its two sliders are the easiest way in:
+        # drag them and the load walks around the chart. They stay in the
+        # sidebar so every tab can reach them, not just Explore.
+        entry = st.selectbox("Enter as", [GAMMA_ENTRY, "R + jX", "VSWR ∠ θ",
+                                          "Series R–L / R–C"])
+        if entry == GAMMA_ENTRY:
+            mag = st.slider("|Γ|   (0 = matched, 1 = total reflection)",
+                            0.0, 0.999, 0.555, 0.001)
+            ang = st.slider("∠Γ   (deg — half a wavelength of line is a full turn)",
+                            -180.0, 180.0, -93.9, 0.1)
+            ZL = complex(sm.Z_from_gamma(mag * np.exp(1j * np.radians(ang)), z0))
+        elif entry == "R + jX":
             c1, c2 = st.columns(2)
             R = c1.number_input("R (Ω)", 0.0, 1e6, 25.0, 1.0)
             X = c2.number_input("X (Ω)", -1e6, 1e6, -40.0, 1.0)
             ZL = complex(R, X)
-        elif entry == GAMMA_ENTRY:
-            mag = st.session_state.gamma_mag
-            ang = st.session_state.gamma_ang
-            st.caption(f"|Γ| = {mag:.3f} ∠ {ang:.1f}°  —  the sliders are on "
-                       "the **Explore** tab, so you can watch the chart while "
-                       "you move them.")
-            ZL = complex(sm.Z_from_gamma(mag * np.exp(1j * np.radians(ang)), z0))
         elif entry == "VSWR ∠ θ":
             c1, c2 = st.columns(2)
             s_in = c1.number_input("VSWR", 1.0, 100.0, 3.5, 0.1)
@@ -326,19 +308,15 @@ tab_explore, tab_match, tab_build, tab_line = st.tabs(
 
 # --- Explore --------------------------------------------------------------
 with tab_explore:
-    if load_kind == "Fixed Z" and st.session_state.entry_mode == GAMMA_ENTRY:
-        st.caption("Walk the load around the chart. Radius is the mismatch, "
-                   "angle is where a line length puts you — everything below "
-                   "and every other tab follows.")
-        sc1, sc2 = st.columns(2)
-        sc1.slider("|Γ|  (0 = matched, 1 = total reflection)",
-                   0.0, 0.999, step=0.001, key="gamma_mag")
-        sc2.slider("∠Γ  (degrees — half a wavelength of line is one full turn)",
-                   -180.0, 180.0, step=0.1, key="gamma_ang")
+    if load_kind == "Fixed Z" and entry == GAMMA_ENTRY:
+        st.caption("Easiest way in: drag the **|Γ|** and **∠Γ** sliders in the "
+                   "sidebar and watch the load walk around the chart. Radius "
+                   "is the mismatch; angle is where a length of line puts you, "
+                   "half a wavelength being one full turn.")
     else:
-        st.caption(f"Set the load with **{GAMMA_ENTRY}** to get sliders here "
-                   "that walk it around the chart.")
-        st.button(f"Switch to {GAMMA_ENTRY}", on_click=use_gamma_entry)
+        st.caption(f"New to this? Set **Load → Enter as → {GAMMA_ENTRY}** in "
+                   "the sidebar — its two sliders walk the load around the "
+                   "chart and are the easiest way to get a feel for it.")
 
     c1, c2 = st.columns([3, 2])
     with c1:

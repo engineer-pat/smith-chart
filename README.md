@@ -99,24 +99,22 @@ sc.point(1 + 0j, "matched")
 
 ## Moving the load around the chart
 
-The Explore tab carries two sliders — |Γ| and ∠Γ — that walk the load around
-the chart while every readout, matching solution and sweep follows. Radius is
-the mismatch; angle is where a length of line puts you, with half a wavelength
-being one full turn. It is the closest thing to dragging a point around the
-chart, and it is precise, which dragging would not be.
+The app opens on **|Γ| ∠ θ** entry, whose two sidebar sliders are the easiest
+way in: drag them and the load walks around the chart while every readout,
+matching solution and sweep follows. Radius is the mismatch; angle is where a
+length of line puts you, half a wavelength being one full turn.
 
-They appear once the load is entered as **|Γ| ∠ θ** (`Load → Enter as` in the
-sidebar); the tab offers a one-click switch when it is not. The sidebar then
-echoes the current values, since the sliders themselves live on the tab so you
-can watch the chart while moving them.
+They live in the **sidebar** on purpose. The load is a global input, so it has
+to be reachable from all four tabs — putting the sliders inside the Explore tab
+(tried, reverted) left the other three with no way to change the load at all.
 
-Actual point-and-drag is not on the table in Streamlit: every interaction is a
-server round trip (~90 ms for this app before the browser even redraws), where
-dragging needs sub-frame feedback. Plotly's Smith subplots also have no
-box/lasso `dragmode`, so there is no way to read a coordinate out of empty
-chart space — only points belonging to a trace. Doing it properly would mean a
-custom bidirectional component; the sliders get the same intuition for a
-fraction of the cost.
+Actual point-and-drag on the chart is not on the table in Streamlit: every
+interaction is a server round trip (~90 ms for this app before the browser even
+redraws), where dragging needs sub-frame feedback. Plotly's Smith subplots also
+have no box/lasso `dragmode`, so there is no way to read a coordinate out of
+empty chart space — only points belonging to a trace. Doing it properly would
+mean a custom bidirectional component; the sliders get the same intuition for a
+fraction of the cost, and are precise besides.
 
 ## Themes
 
