@@ -84,3 +84,33 @@ def test_matplotlib_chart_follows_the_active_theme():
             assert sc.ax.get_facecolor() == \
                 matplotlib.colors.to_rgba(S.palette(name)["SURFACE"])
             sc.fig.clf()
+
+
+# --- the app's Streamlit theme --------------------------------------------
+
+def test_generated_streamlit_config_is_in_step_with_the_palette():
+    """The committed config.toml must match what the palettes generate.
+
+    Streamlit reads its theme from a file at server start, so the app frame
+    cannot follow the palette at runtime; the file is generated instead, and
+    this is what stops it drifting.
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    r = subprocess.run(
+        [sys.executable, str(root / "scripts" / "gen_streamlit_theme.py"), "--check"],
+        capture_output=True, text=True, cwd=root,
+    )
+    assert r.returncode == 0, (
+        r.stderr.strip() or "run: python scripts/gen_streamlit_theme.py")
+
+
+def test_streamlit_chrome_matches_the_chart_surface():
+    import streamlit as st
+    for name in ("light", "dark"):
+        assert st.get_option(f"theme.{name}.backgroundColor") == \
+            S.palette(name)["SURFACE"]
+        assert st.get_option(f"theme.{name}.textColor") == S.palette(name)["INK"]

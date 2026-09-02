@@ -127,13 +127,31 @@ light until the reader chooses otherwise. The swap CSS is therefore keyed only
 on the body class — honouring `prefers-color-scheme` there would put dark
 figures on a light page.
 
-**The app** follows Streamlit's own theme: change it under *Settings* in the ⋮
-menu and the charts restyle to match. The sidebar has an override if you want
-the charts pinned regardless. Each script run takes one palette snapshot and
-passes it explicitly into every figure, so two browser sessions on different
-themes stay independent. `.streamlit/config.toml` deliberately sets no `base`,
-which leaves Streamlit following the browser preference; set `base = "dark"`
-there to pin it.
+**The app** is dark by default, chrome and charts together. Streamlit themes
+its own frame from `.streamlit/config.toml`, read once at server start, so it
+cannot follow the palette at runtime the way the charts do — the file is
+generated from `smithlib/style.py` instead:
+
+```bash
+make theme            # regenerate after editing the palettes
+```
+
+A test fails if the committed file drifts out of step, so the app frame and the
+chart surface stay the same colour.
+
+Switching themes under *Settings* (the app's top-right ⋮ menu) restyles the
+chrome, and the charts follow via `st.context.theme`. That is only reported
+back *after* the first script run, so the fallback is the configured
+`theme.base` rather than a hardcoded light — otherwise every fresh session
+would flash light charts onto dark chrome. The sidebar also has an explicit
+override if you want the charts pinned regardless of the frame.
+
+To open light instead, change `base` in `scripts/gen_streamlit_theme.py`
+(`DEFAULT_BASE`) and re-run `make theme`. Note that Streamlit only picks the
+config up when launched from the project root, which is what `make app` does.
+
+Each script run takes one palette snapshot and passes it explicitly into every
+figure, so two browser sessions on different themes stay independent.
 
 ## A note on bandwidth
 

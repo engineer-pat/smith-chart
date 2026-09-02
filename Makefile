@@ -1,13 +1,14 @@
 VENV := .venv
 PY   := $(VENV)/bin/python
 
-.PHONY: help venv test app docs clean
+.PHONY: help venv test app docs theme clean
 
 help:
 	@echo "make venv   - create .venv and install the package with all extras"
 	@echo "make test   - run the test suite"
 	@echo "make app    - launch the Streamlit workbench"
 	@echo "make docs   - render the Quarto tutorial to HTML"
+	@echo "make theme  - regenerate .streamlit/config.toml from smithlib/style.py"
 	@echo "make clean  - remove build and render artefacts"
 
 venv:
@@ -18,8 +19,14 @@ venv:
 test:
 	$(PY) -m pytest -q
 
+# Run from the project root so Streamlit finds .streamlit/config.toml.
 app:
 	$(VENV)/bin/streamlit run app/app.py
+
+# The app chrome is themed from a config file Streamlit reads at start-up, so
+# it is generated from the palettes rather than hand-copied.
+theme:
+	$(PY) scripts/gen_streamlit_theme.py
 
 # Quarto reuses a persistent Jupyter kernel between renders; restarting it
 # avoids picking up state from an earlier run.

@@ -37,15 +37,22 @@ PLOT_CFG = {"displaylogo": False,
 
 
 def detect_streamlit_theme():
-    """Whatever theme Streamlit itself is showing, or None if it cannot say.
+    """Whatever theme Streamlit itself is currently showing.
 
-    Streamlit reports this from the browser, so it is unset on the very first
-    script run and on older versions -- hence the fallback.
+    ``st.context.theme`` is reported back by the browser, so it is unset on the
+    very first script run of a session and on older Streamlit versions.  The
+    fallback is the configured ``theme.base`` -- which is exactly what
+    Streamlit paints until the browser reports in -- rather than a hardcoded
+    "light", which would flash light charts onto dark chrome.
     """
     try:
-        return st.context.theme.type
+        reported = st.context.theme.type
     except Exception:
-        return None
+        reported = None
+    if reported in ("light", "dark"):
+        return reported
+    base = st.get_option("theme.base")
+    return base if base in ("light", "dark") else "light"
 
 
 # ==========================================================================
@@ -140,10 +147,8 @@ with st.sidebar:
         "Chart theme", ["Match Streamlit", "Light", "Dark"], horizontal=True,
         help="Charts follow Streamlit's own theme by default — change that "
              "under Settings in the ⋮ menu and the charts follow.")
-    if theme_choice == "Match Streamlit":
-        mode = detect_streamlit_theme() or "light"
-    else:
-        mode = theme_choice.lower()
+    mode = (detect_streamlit_theme() if theme_choice == "Match Streamlit"
+            else theme_choice.lower())
 
     st.divider()
     st.header("Chart overlays")
