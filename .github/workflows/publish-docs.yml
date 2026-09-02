@@ -1,0 +1,72 @@
+# Render docs/smith-chart.qmd and publish it to GitHub Pages.
+#
+# The rendered HTML and its figures are build artefacts and stay out of git
+# (see .gitignore); this workflow regenerates them on every push so the
+# published page can never drift from the source .qmd.
+name: Publish docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "smithlib/**"
+      - "pyproject.toml"
+      - ".github/workflows/publish-docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a run finish rather than cancelling it, so a deploy is never half-done.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: quarto-dev/quarto-actions/setup@v2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      # The docs extra brings matplotlib and the Jupyter kernel Quarto needs;
+      # the package itself must be importable for `import smithlib` to resolve.
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[docs]"
+
+      - name: Render
+        working-directory: docs
+        env:
+          QUARTO_PYTHON: python
+        run: quarto render smith-chart.qmd --to html
+
+      # Pages serves / from the artifact root, so the document also has to
+      # exist as index.html. A copy keeps every relative path to
+      # smith-chart_files/ and figures/ valid.
+      - name: Add site index
+        run: cp docs/smith-chart.html docs/index.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
