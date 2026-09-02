@@ -260,6 +260,23 @@ class SmithChart:
             self._label_arc(g, label, color, at=0.5)
         return z_from_gamma(g[-1])
 
+    def curve(self, z, color=None, label=None, lw=None, ls="-", arrows=1,
+              zorder=5, label_offset=None):
+        """Plot an arbitrary sequence of normalized impedances as a path.
+
+        Use this when the locus is not one of the three standard moves -- for
+        instance the path *inside* a line section whose characteristic
+        impedance differs from the chart's reference.
+        """
+        color = color or S.SERIES[0]
+        g = gamma_from_z(np.asarray(z, dtype=complex))
+        self.ax.plot(*_xy(g), color=color, lw=lw or S.LW_PATH, ls=ls,
+                     zorder=zorder, solid_capstyle="round")
+        self._arrowheads(g, color, n=arrows, zorder=zorder + 0.1)
+        if label:
+            self._label_arc(g, label, color, at=0.5, offset=label_offset)
+        return self
+
     def frequency_sweep(self, z_of_f, freqs, color=None, label=None,
                         mark_every=None):
         """Plot an impedance-vs-frequency locus, the everyday use of the chart.

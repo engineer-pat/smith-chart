@@ -57,6 +57,7 @@ web front end later touches nothing under `smithlib/`.
 ## Using the library directly
 
 ```python
+import numpy as np
 import smithlib as sm
 from smithlib.matching import l_match
 from smithlib.network import FixedLoad, Network, ShuntL, SeriesL
@@ -70,7 +71,7 @@ for m in l_match(ZL, Z0, freq_hz=f0):
     print(m.topology, [t for *_, t in m.components()], f"Q={m.network_q:.2f}")
 
 net = Network(load=FixedLoad(ZL), elements=[ShuntL(19.8e-9), SeriesL(7.03e-9)])
-net.Zin(f0)                                    # 50 + 0j
+net.Zin(f0)                                    # ~50 ohm (rounded part values)
 net.sweep(np.linspace(0.8e9, 1.2e9, 401))      # vectorised over frequency
 ```
 

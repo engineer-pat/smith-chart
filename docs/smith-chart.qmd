@@ -712,6 +712,8 @@ Complex loads need one extra step: first walk down the line to where the
 impedance goes purely real — that is, to the horizontal axis of the chart.
 
 ```{python}
+from smithlib.network import Line
+
 qw = quarter_wave_match(ZL, Z0)
 print(f"walk {qw.d_wl:.4f} lambda to reach a real {qw.R_real:.2f} ohm")
 print(f"then a quarter-wave section of {qw.z0_transformer:.2f} ohm line")
@@ -733,19 +735,40 @@ s.move(qw.z_load, qw.steps[0].z_after, kind="gamma", color=S.C_LINE, arrows=2,
        label=f"rotate {qw.d_wl:.3f}$\\lambda$", label_offset=(0.36, -0.10))
 s.point(qw.steps[0].z_after, f"purely real\n{qw.R_real:.1f} $\\Omega$",
         color=S.C_LINE, offset=(-0.10, -0.30))
-s.move(qw.steps[0].z_after, 1 + 0j, kind="gamma", color=S.C_TARGET, arrows=2,
-       label=f"$\\lambda/4$ of {qw.z0_transformer:.1f} $\\Omega$ line",
-       label_offset=(-0.05, 0.34))
-s.point(1 + 0j, "matched", color=S.C_TARGET, offset=(0.30, 0.10))
+# The naive drawing: a rotation about the centre of THIS chart. Wrong.
+s.move(qw.steps[0].z_after, 1 + 0j, kind="gamma", color=S.INK_MUTED, arrows=0,
+       ls="--", lw=1.4)
+
+# The true path inside the transformer. Inside a section of characteristic
+# impedance Z0qw the locus is a circle about Z0qw, so step along the actual
+# line and convert each impedance back to this chart's 50-ohm reference.
+lam_qw = 3e8 / f0
+lengths = np.linspace(0, 0.25, 240) * lam_qw
+Z_start = qw.steps[0].z_after * Z0
+Z_true = np.array([complex(Line(l, qw.z0_transformer).apply(Z_start, f0))
+                   for l in lengths])
+s.curve(Z_true / Z0, color=S.C_TARGET, arrows=2,
+        label=f"$\\lambda/4$ of {qw.z0_transformer:.1f} $\\Omega$ line",
+        label_offset=(0.10, 0.30))
+s.point(1 + 0j, "matched", color=S.C_TARGET, offset=(0.30, 0.14))
+s.callout("rotating about the $50\\,\\Omega$ centre:\n"
+          "wrong path, right endpoints",
+          xy=(-0.16, 0.46), xytext=(-0.52, 0.84), color=S.INK_MUTED,
+          ha="center", fontsize=8.5)
 s.legend()
 plt.show()
 ```
 
-The green arc is drawn as a rotation for readability, but note the honest
-caveat: **inside** a section of different $Z_0$ the locus is a circle centred on
-$Z_{0,\text{qw}}$, not on $Z_0$. It is only the two *endpoints* that are correct
-on a $50\,\Omega$ chart. This is the single most common way to misread a
-transformer on a chart.
+Notice the two green-and-grey paths. **Inside** a section whose characteristic
+impedance differs from the chart's reference, the locus is a circle centred on
+$Z_{0,\text{qw}}$ — *not* on $Z_0$. The grey dashed curve is what you get by
+rotating about the centre of a $50\,\Omega$ chart, and it is simply the wrong
+path; it happens to share its endpoints with the real one, which is exactly why
+the mistake survives. This is the most common way to misread a transformer.
+
+If you need the interior path to be a plain rotation, renormalize the chart to
+$Z_{0,\text{qw}}$ — then it is, and the $50\,\Omega$ points become the awkward
+ones instead.
 
 # What you actually see on a VNA
 
