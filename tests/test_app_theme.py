@@ -66,3 +66,28 @@ def test_every_chart_in_a_run_shares_one_theme():
     for choice in ("Match Streamlit", "Light", "Dark"):
         bgs = chart_backgrounds(run(lambda at, c=choice: at.radio[THEME_RADIO].set_value(c)))
         assert len(bgs) == 1, f"{choice} produced mixed backgrounds: {bgs}"
+
+
+def test_charts_opt_out_of_streamlits_plotly_template():
+    """st.plotly_chart must be called with theme=None.
+
+    The default, theme="streamlit", repaints the figure with Streamlit's own
+    template and overrides the backgrounds set from the palette. That made
+    charts render bright wherever Streamlit's own theme resolved light -- and
+    the sidebar override could not win, because the repaint happens in the
+    browser after the spec is sent.
+    """
+    at = run()
+    seen = [el.proto.theme for el in at.main
+            if type(el).__name__ == "UnknownElement" and hasattr(el.proto, "spec")]
+    assert seen, "expected at least one Plotly chart"
+    assert all(t != "streamlit" for t in seen), seen
+
+
+def test_forced_dark_survives_all_the_way_to_the_wire():
+    """A dark chart must stay dark in the spec actually sent to the browser."""
+    at = run(lambda a: a.radio[THEME_RADIO].set_value("Dark"))
+    assert chart_backgrounds(at) == {S.palette("dark")["SURFACE"]}
+    for el in at.main:
+        if type(el).__name__ == "UnknownElement" and hasattr(el.proto, "spec"):
+            assert el.proto.theme != "streamlit"

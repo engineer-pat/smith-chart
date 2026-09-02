@@ -35,6 +35,13 @@ st.set_page_config(page_title="Smith Chart Workbench", page_icon="📡",
 PLOT_CFG = {"displaylogo": False,
             "modeBarButtonsToRemove": ["select2d", "lasso2d"]}
 
+# Every chart is passed theme=None. st.plotly_chart defaults to
+# theme="streamlit", which repaints the figure with Streamlit's own template
+# and overrides the backgrounds set here -- so a figure built from the dark
+# palette still rendered bright wherever Streamlit's own theme resolved light,
+# and the sidebar override could not win. These figures are already coloured
+# from smithlib.style, so the template is pure interference.
+
 
 def detect_streamlit_theme():
     """Whatever theme Streamlit itself is currently showing.
@@ -229,7 +236,7 @@ def sweep_panel(net, title, extra=None):
         yaxis=dict(title="return loss (dB)", gridcolor=P["GRID_MINOR"],
                    zeroline=False, autorange="reversed"),
     )
-    st.plotly_chart(fig, width="stretch", config=PLOT_CFG,
+    st.plotly_chart(fig, width="stretch", config=PLOT_CFG, theme=None,
                     key=f"sweep-{title}")
 
     # Usable bandwidth = the contiguous run around f0 that stays above 10 dB.
@@ -334,7 +341,7 @@ with tab_explore:
                                    "<br>VSWR %{customdata[3]:.2f}<extra></extra>"))
         f.point(zL, f"load @ {f0_ghz:g} GHz", color=P["C_LOAD"], size=13)
         f.point(1 + 0j, "matched", color=P["C_TARGET"], size=10, symbol="x")
-        st.plotly_chart(f.fig, width="stretch", config=PLOT_CFG,
+        st.plotly_chart(f.fig, width="stretch", config=PLOT_CFG, theme=None,
                         key="explore-smith")
     with c2:
         st.subheader("At the design frequency")
@@ -395,7 +402,7 @@ with tab_match:
                 fig = chart_for_trajectory(traj_with_arcs(net),
                                            "matching path")
                 st.plotly_chart(fig.fig, width="stretch",
-                                config=PLOT_CFG, key="lmatch-smith")
+                                config=PLOT_CFG, theme=None, key="lmatch-smith")
             with c2:
                 st.subheader("Bill of materials")
                 for role, kind, val, txt in m.components():
@@ -429,7 +436,7 @@ with tab_match:
             with c1:
                 fig = chart_for_trajectory(traj_with_arcs(net), "stub tuner")
                 st.plotly_chart(fig.fig, width="stretch",
-                                config=PLOT_CFG, key="stub-smith")
+                                config=PLOT_CFG, theme=None, key="stub-smith")
             with c2:
                 st.subheader("Cut list")
                 st.write(f"**Line from load** — {s_.d_wl:.4f} λ  "
@@ -458,7 +465,7 @@ with tab_match:
         with c1:
             fig = chart_for_trajectory(traj_with_arcs(net), "quarter-wave")
             st.plotly_chart(fig.fig, width="stretch",
-                            config=PLOT_CFG, key="qw-smith")
+                            config=PLOT_CFG, theme=None, key="qw-smith")
         with c2:
             st.subheader("Cut list")
             st.write(f"**Line from load** — {qw.d_wl:.4f} λ = "
@@ -528,7 +535,7 @@ with tab_build:
     c1, c2 = st.columns([3, 2])
     with c1:
         fig = chart_for_trajectory(traj_with_arcs(net), "network path")
-        st.plotly_chart(fig.fig, width="stretch", config=PLOT_CFG,
+        st.plotly_chart(fig.fig, width="stretch", config=PLOT_CFG, theme=None,
                         key="build-smith")
     with c2:
         st.subheader("Chain, load-side first")
@@ -599,7 +606,7 @@ with tab_line:
         f.point(z_in, "input", color=P["C_TARGET"], size=13, symbol="star")
         f.point(1 + 0j, "matched", color=P["INK_MUTED"], size=8, symbol="x",
                 showlegend=False)
-        st.plotly_chart(f.fig, width="stretch", config=PLOT_CFG,
+        st.plotly_chart(f.fig, width="stretch", config=PLOT_CFG, theme=None,
                         key="line-smith")
 
 st.divider()

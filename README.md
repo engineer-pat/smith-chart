@@ -7,7 +7,7 @@ Three pieces, in the order they are useful:
 
 | Piece | What it is |
 |---|---|
-| [`docs/smith-chart.qmd`](docs/smith-chart.qmd) | The tutorial. What the chart is, why it exists, and worked examples with the moves drawn as arrows on the chart. |
+| [`docs/smith-chart.qmd`](docs/smith-chart.qmd) | The tutorial — [read it here](https://engineer-pat.github.io/smith-chart/). What the chart is, why it exists, and worked examples with the moves drawn as arrows on the chart. |
 | [`smithlib/`](smithlib/) | The math. Reflection coefficients, transmission lines, matching-network synthesis, and two chart renderers. |
 | [`app/app.py`](app/app.py) | An interactive workbench built on `smithlib`. |
 
@@ -76,6 +76,19 @@ What the repo already provides:
 - **`streamlit>=1.51`** is the real floor: that is the release where
   `st.plotly_chart` gained `width=`, which this app uses. Verified by running
   the app against 1.51.
+
+### The document
+
+The tutorial is published to GitHub Pages at
+<https://engineer-pat.github.io/smith-chart/> by
+[`.github/workflows/publish-docs.yml`](.github/workflows/publish-docs.yml),
+which re-renders the `.qmd` on every push touching `docs/` or `smithlib/`. The
+HTML and its per-theme figures are build artefacts and stay out of git, so
+regenerating them in CI is what stops the published page drifting from source.
+
+Pages serves `/` from the artifact root, so the build also copies the rendered
+file to `index.html` — a copy rather than a redirect, which keeps every
+relative path to `smith-chart_files/` and `figures/` valid.
 
 ## Why it is laid out this way
 
@@ -208,6 +221,13 @@ config up when launched from the project root, which is what `make app` does.
 
 Each script run takes one palette snapshot and passes it explicitly into every
 figure, so two browser sessions on different themes stay independent.
+
+Every chart is drawn with `st.plotly_chart(..., theme=None)`. The default,
+`theme="streamlit"`, repaints the figure with Streamlit's own template in the
+browser and overrides the backgrounds set here — which left charts bright
+wherever Streamlit's own theme resolved light, with the sidebar override
+powerless to fix it because the repaint happens after the spec is sent. These
+figures are already coloured from the palette, so the template is interference.
 
 ## A note on bandwidth
 
