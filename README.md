@@ -97,6 +97,27 @@ sc.path(m.steps, ZL / Z0)                      # arcs + arrowheads + labels
 sc.point(1 + 0j, "matched")
 ```
 
+## Moving the load around the chart
+
+The Explore tab carries two sliders — |Γ| and ∠Γ — that walk the load around
+the chart while every readout, matching solution and sweep follows. Radius is
+the mismatch; angle is where a length of line puts you, with half a wavelength
+being one full turn. It is the closest thing to dragging a point around the
+chart, and it is precise, which dragging would not be.
+
+They appear once the load is entered as **|Γ| ∠ θ** (`Load → Enter as` in the
+sidebar); the tab offers a one-click switch when it is not. The sidebar then
+echoes the current values, since the sliders themselves live on the tab so you
+can watch the chart while moving them.
+
+Actual point-and-drag is not on the table in Streamlit: every interaction is a
+server round trip (~90 ms for this app before the browser even redraws), where
+dragging needs sub-frame feedback. Plotly's Smith subplots also have no
+box/lasso `dragmode`, so there is no way to read a coordinate out of empty
+chart space — only points belonging to a trace. Doing it properly would mean a
+custom bidirectional component; the sliders get the same intuition for a
+fraction of the cost.
+
 ## Themes
 
 Colour lives in one place, [`smithlib/style.py`](smithlib/style.py), as two
@@ -198,3 +219,7 @@ stays meaningful if the internals are rewritten.
 
 Pozar, *Microwave Engineering*, chapters 2 and 5. Smith's original is
 *Transmission Line Calculator*, Electronics, January 1939.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE).
