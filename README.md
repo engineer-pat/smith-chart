@@ -1,15 +1,17 @@
-# smithChart
+# smith-chart
 
 Learning and working with Smith charts: a written explanation, a small RF
 library, and an interactive app.
 
+### 📖 [Read the tutorial](https://engineer-pat.github.io/smith-chart/) &nbsp;·&nbsp; 📡 [Open the app](https://smith-chart.streamlit.app/)
+
 Three pieces, in the order they are useful:
 
-| Piece | What it is |
-|---|---|
-| [`docs/smith-chart.qmd`](docs/smith-chart.qmd) | The tutorial — [read it here](https://engineer-pat.github.io/smith-chart/). What the chart is, why it exists, and worked examples with the moves drawn as arrows on the chart. |
-| [`smithlib/`](smithlib/) | The math. Reflection coefficients, transmission lines, matching-network synthesis, and two chart renderers. |
-| [`app/app.py`](app/app.py) | An interactive workbench built on `smithlib`. |
+| Piece | What it is | Live |
+|---|---|---|
+| [`docs/smith-chart.qmd`](docs/smith-chart.qmd) | The tutorial. What the chart is, why it exists, and worked examples with the moves drawn as arrows on the chart. | [engineer-pat.github.io/smith-chart](https://engineer-pat.github.io/smith-chart/) |
+| [`smithlib/`](smithlib/) | The math. Reflection coefficients, transmission lines, matching-network synthesis, and two chart renderers. | — |
+| [`app/app.py`](app/app.py) | An interactive workbench built on `smithlib`. | [smith-chart.streamlit.app](https://smith-chart.streamlit.app/) |
 
 Both the document and the app have a dark mode — see [Themes](#themes).
 
@@ -40,11 +42,20 @@ QUARTO_PYTHON=$PWD/.venv/bin/python quarto render docs/smith-chart.qmd
 > Quarto keeps a **persistent Jupyter kernel** between renders. If a render
 > behaves as though it is running stale code, add `--execute-daemon-restart`.
 
-## Deploying the app
+## Deployment
 
-The repo is ready for [Streamlit Community Cloud](https://share.streamlit.io);
-the last step has to be done in a browser, since it is an OAuth flow that
-authorises Streamlit against your GitHub account.
+Both halves are deployed and rebuild themselves from `main`:
+
+| | Where | Rebuilt by |
+|---|---|---|
+| Tutorial | <https://engineer-pat.github.io/smith-chart/> | GitHub Actions, on every push touching `docs/` or `smithlib/` |
+| App | <https://smith-chart.streamlit.app/> | Streamlit Community Cloud, on every push to `main` |
+
+### The app
+
+Deployed on [Streamlit Community Cloud](https://share.streamlit.io). To
+reproduce it — the last step needs a browser, being an OAuth flow that
+authorises Streamlit against a GitHub account:
 
 1. Go to <https://share.streamlit.io> and sign in with GitHub.
 2. **Create app → Deploy a public app from GitHub**.
@@ -228,6 +239,13 @@ browser and overrides the backgrounds set here — which left charts bright
 wherever Streamlit's own theme resolved light, with the sidebar override
 powerless to fix it because the repaint happens after the spec is sent. These
 figures are already coloured from the palette, so the template is interference.
+
+### Browser dark-mode extensions
+
+Dark Reader and similar extensions re-colour pages themselves, and will fight
+both of these — the document's figure swap and the app's chart palette alike.
+If something looks bright or washed out in a way the in-page controls cannot
+fix, that is usually the culprit; disable the extension for these two sites.
 
 ## A note on bandwidth
 
