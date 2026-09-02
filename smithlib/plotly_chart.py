@@ -61,26 +61,33 @@ class SmithFigure:
     """A Plotly figure wrapping one Smith chart, with the same verbs as
     :class:`smithlib.chart.SmithChart`."""
 
-    def __init__(self, z0=50.0, title=None, height=620):
+    def __init__(self, z0=50.0, title=None, height=620, palette=None):
+        """``palette`` takes a snapshot from :func:`smithlib.style.palette`.
+
+        Holding the colours on the instance rather than reading module globals
+        keeps two figures on different themes independent, which is what the
+        app needs when several browser sessions are open at once.
+        """
         self.z0 = z0
+        self.P = palette or S.palette()
         self.fig = go.Figure()
         self.fig.update_layout(
             title=title,
             height=height,
             margin=dict(l=10, r=10, t=48 if title else 16, b=54),
-            paper_bgcolor=S.SURFACE,
-            plot_bgcolor=S.SURFACE,
-            font=dict(color=S.INK, size=12),
+            paper_bgcolor=self.P["SURFACE"],
+            plot_bgcolor=self.P["SURFACE"],
+            font=dict(color=self.P["INK"], size=12),
             legend=dict(orientation="h", yanchor="top", y=-0.02,
                         xanchor="center", x=0.5,
-                        bgcolor=S.SURFACE, font=dict(size=11)),
+                        bgcolor=self.P["SURFACE"], font=dict(size=11)),
             smith=dict(
-                bgcolor=S.SURFACE,
-                realaxis=dict(gridcolor=S.GRID_MINOR, linecolor=S.GRID_AXIS,
-                              tickcolor=S.GRID_MAJOR, tickfont=dict(size=9)),
-                imaginaryaxis=dict(gridcolor=S.GRID_MINOR,
-                                   linecolor=S.GRID_AXIS,
-                                   tickcolor=S.GRID_MAJOR,
+                bgcolor=self.P["SURFACE"],
+                realaxis=dict(gridcolor=self.P["GRID_MINOR"], linecolor=self.P["GRID_AXIS"],
+                              tickcolor=self.P["GRID_MAJOR"], tickfont=dict(size=9)),
+                imaginaryaxis=dict(gridcolor=self.P["GRID_MINOR"],
+                                   linecolor=self.P["GRID_AXIS"],
+                                   tickcolor=self.P["GRID_MAJOR"],
                                    tickfont=dict(size=9)),
             ),
         )
@@ -93,8 +100,8 @@ class SmithFigure:
         rr, xx = _smith_xy(gamma_from_z(z))
         self.fig.add_trace(go.Scattersmith(
             real=rr, imag=xx, mode="markers", name=name,
-            marker=dict(size=size, color=color or S.C_LOAD, symbol=symbol,
-                        line=dict(width=1.6, color=S.SURFACE)),
+            marker=dict(size=size, color=color or self.P["C_LOAD"], symbol=symbol,
+                        line=dict(width=1.6, color=self.P["SURFACE"])),
             hovertext=_hover(z, self.z0), hoverinfo="text+name",
             showlegend=showlegend,
         ))
@@ -103,9 +110,9 @@ class SmithFigure:
     def arc(self, z_from, z_to, kind="resistance", name=None, color=None,
             width=3.0, arrows=1, dash=None, showlegend=True):
         """Draw the physical arc between two impedances, with direction arrows."""
-        color = color or {"resistance": S.C_SERIES_EL,
-                          "conductance": S.C_SHUNT_EL,
-                          "gamma": S.C_LINE}.get(kind, S.SERIES[0])
+        color = color or {"resistance": self.P["C_SERIES_EL"],
+                          "conductance": self.P["C_SHUNT_EL"],
+                          "gamma": self.P["C_LINE"]}.get(kind, self.P["SERIES"][0])
         pts = geo.arc_between(z_from, z_to, kind=kind, n=201)
         rr, xx = _smith_xy(pts)
         self.fig.add_trace(go.Scattersmith(
@@ -159,10 +166,10 @@ class SmithFigure:
             kw = dict(hovertext=_hover(z, self.z0), hoverinfo="text+name")
         self.fig.add_trace(go.Scattersmith(
             real=rr, imag=xx, mode="lines", name=name,
-            line=dict(color=color or S.SERIES[0], width=width, dash=dash),
+            line=dict(color=color or self.P["SERIES"][0], width=width, dash=dash),
             **kw,
         ))
-        self._arrows(g, color or S.SERIES[0], arrows)
+        self._arrows(g, color or self.P["SERIES"][0], arrows)
         return self
 
     def vswr_circle(self, s, name=None, color=None, dash="dash", width=1.5):
@@ -170,7 +177,7 @@ class SmithFigure:
         self.fig.add_trace(go.Scattersmith(
             real=rr, imag=xx, mode="lines",
             name=name or f"VSWR {s:.2f}",
-            line=dict(color=color or S.INK_MUTED, width=width, dash=dash),
+            line=dict(color=color or self.P["INK_MUTED"], width=width, dash=dash),
             hoverinfo="name",
         ))
         return self
@@ -180,7 +187,7 @@ class SmithFigure:
             rr, xx = _smith_xy(geo.q_contour(q, half=half))
             self.fig.add_trace(go.Scattersmith(
                 real=rr, imag=xx, mode="lines", name=f"Q = {q:g}",
-                line=dict(color=color or S.ACCENT, width=1.3, dash="dot"),
+                line=dict(color=color or self.P["ACCENT"], width=1.3, dash="dot"),
                 hoverinfo="name", showlegend=(half == "upper"),
                 legendgroup=f"q{q}",
             ))
@@ -189,8 +196,8 @@ class SmithFigure:
     def unity_circles(self):
         """The r = 1 and g = 1 circles -- the two runways into the centre."""
         for circ, color, name in (
-            (geo.resistance_circle(1.0), S.C_SERIES_EL, "r = 1"),
-            (geo.conductance_circle(1.0), S.C_SHUNT_EL, "g = 1"),
+            (geo.resistance_circle(1.0), self.P["C_SERIES_EL"], "r = 1"),
+            (geo.conductance_circle(1.0), self.P["C_SHUNT_EL"], "g = 1"),
         ):
             rr, xx = _smith_xy(circ)
             self.fig.add_trace(go.Scattersmith(

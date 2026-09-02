@@ -1,0 +1,14 @@
+# Streamlit's own chrome. The charts read the active theme at runtime
+# (see detect_streamlit_theme in app/app.py) and restyle themselves to match,
+# so switching theme under Settings in the ⋮ menu restyles the whole app.
+#
+# No `base` is set on purpose: without it Streamlit follows the browser's
+# light/dark preference, which is usually what the user wants. Set
+# base = "dark" here to pin it.
+
+[theme]
+primaryColor = "#2a78d6"
+font = "sans serif"
+
+[browser]
+gatherUsageStats = false

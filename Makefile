@@ -28,5 +28,5 @@ docs:
 		--to html --execute-daemon-restart
 
 clean:
-	rm -rf docs/smith-chart.html docs/smith-chart_files docs/.jupyter_cache
+	rm -rf docs/smith-chart.html docs/smith-chart_files docs/figures docs/.jupyter_cache
 	rm -rf .pytest_cache **/__pycache__ *.egg-info build dist

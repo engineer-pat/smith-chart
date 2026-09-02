@@ -1,6 +1,28 @@
 /* Keep figures from feeling cramped and give tables a lighter touch. */
 .quarto-figure { margin-block: 1.6rem; }
-figcaption { font-size: 0.88rem; color: #52514e; }
+figcaption { font-size: 0.88rem; }
 table { font-size: 0.92rem; }
 h1 { margin-top: 2.2rem; }
 code { font-size: 0.88em; }
+
+/* --- theme-swapped figures -------------------------------------------------
+   Every figure is rendered twice, once per palette, and emitted as a pair of
+   <img> tags (see the `dual` helper in the document's setup chunk).
+
+   The body class is the only signal used here. Quarto stamps `quarto-light` /
+   `quarto-dark` on <body> and rewrites it when the reader hits the navbar
+   toggle, so the swap needs no JavaScript of our own.
+
+   Deliberately NOT keyed off `prefers-color-scheme`: Quarto's toggle ignores
+   the OS setting and starts light unless the reader has previously chosen
+   dark, so honouring the OS here would put dark figures on a light page. */
+img.light-only,
+img.dark-only {
+  display: block;
+  margin-inline: auto;
+  max-width: 100%;
+  height: auto;
+}
+img.dark-only { display: none; }
+body.quarto-dark img.light-only { display: none; }
+body.quarto-dark img.dark-only  { display: block; }

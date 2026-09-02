@@ -12,7 +12,9 @@ format:
     code-fold: show
     code-tools: true
     fig-align: center
-    theme: cosmo
+    theme:
+      light: cosmo
+      dark: darkly
     css: styles.css
 execute:
   echo: true
@@ -24,8 +26,11 @@ jupyter: python3
 ```{python}
 #| echo: false
 #| label: setup
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
+from IPython.display import HTML
 
 import smithlib as sm
 from smithlib.chart import SmithChart
@@ -34,15 +39,34 @@ from smithlib import style as S
 from smithlib.matching import (l_match, single_stub_match, quarter_wave_match,
                                format_component)
 
-plt.rcParams.update({
-    "figure.facecolor": S.SURFACE,
-    "savefig.facecolor": S.SURFACE,
-    "font.size": 10,
-    "axes.edgecolor": S.GRID_MAJOR,
-    "text.color": S.INK,
-})
-
 Z0 = 50.0
+
+FIGDIR = Path("figures")
+FIGDIR.mkdir(exist_ok=True)
+
+
+def dual(build, name, dpi=110):
+    """Render ``build()`` once per theme and emit a theme-swapping image pair.
+
+    Every figure in this document is drawn twice -- once against the light
+    palette, once against the dark one -- and the page shows whichever matches
+    the reader's theme.  ``build`` is a zero-argument function returning a
+    matplotlib figure; the drawing has to be repeatable, which is why the
+    figures below are written as functions rather than as loose script.
+    """
+    src = {}
+    for mode in ("light", "dark"):
+        with S.theme(mode):
+            plt.rcParams.update(S.matplotlib_rc())
+            fig = build()
+            out = FIGDIR / f"{name}-{mode}.png"
+            fig.savefig(out, dpi=dpi, bbox_inches="tight", facecolor=S.SURFACE)
+            plt.close(fig)
+            src[mode] = out.as_posix()
+    return HTML(
+        f'<img class="light-only" src="{src["light"]}" alt="{name}">'
+        f'<img class="dark-only" src="{src["dark"]}" alt="{name}">'
+    )
 ```
 
 # The problem the chart solves
@@ -77,38 +101,42 @@ that exists lands somewhere inside that circle.
 #| fig-width: 11
 #| fig-height: 5.4
 
-loads = [25 - 40j, 100 + 0j, 50 + 0j, 10 + 5j, 300 + 120j, 50 - 200j]
-names = ["A", "B", "C", "D", "E", "F"]
+def mapping_figure():
 
-fig, (axL, axR) = plt.subplots(1, 2, figsize=(11, 5.4))
+    loads = [25 - 40j, 100 + 0j, 50 + 0j, 10 + 5j, 300 + 120j, 50 - 200j]
+    names = ["A", "B", "C", "D", "E", "F"]
 
-# --- left: the impedance plane -------------------------------------------
-axL.axhline(0, color=S.GRID_AXIS, lw=0.9)
-axL.axvline(0, color=S.GRID_AXIS, lw=0.9)
-axL.set_xlim(0, 160); axL.set_ylim(-120, 120)
-axL.set_xlabel(r"$R$  [$\Omega$]"); axL.set_ylabel(r"$X$  [$\Omega$]")
-axL.set_title("impedance plane — unbounded", fontsize=11)
-axL.grid(True, color=S.GRID_MINOR, lw=0.6)
-axL.set_facecolor(S.SURFACE)
-for Z, n in zip(loads, names):
-    if Z.real <= 160 and abs(Z.imag) <= 120:
-        axL.plot(Z.real, Z.imag, "o", ms=7, color=S.SERIES[0],
-                 mec=S.SURFACE, mew=1.4)
-        axL.annotate(n, (Z.real, Z.imag), xytext=(7, 6),
-                     textcoords="offset points", fontsize=10, color=S.INK)
-    else:
-        axL.annotate(f"{n} — off the page\n({Z.real:.0f}{Z.imag:+.0f}j)",
-                     (155, np.clip(Z.imag, -110, 110)), ha="right",
-                     fontsize=8.5, color=S.SERIES[1])
+    fig, (axL, axR) = plt.subplots(1, 2, figsize=(11, 5.4))
 
-# --- right: the same loads on the chart ----------------------------------
-sc = SmithChart(ax=axR, z0=Z0)
-sc.grid()
-axR.set_title("Smith chart — everything fits", fontsize=11)
-for Z, n in zip(loads, names):
-    sc.point(Z / Z0, n, color=S.SERIES[0])
-plt.tight_layout()
-plt.show()
+    # --- left: the impedance plane -------------------------------------------
+    axL.axhline(0, color=S.GRID_AXIS, lw=0.9)
+    axL.axvline(0, color=S.GRID_AXIS, lw=0.9)
+    axL.set_xlim(0, 160); axL.set_ylim(-120, 120)
+    axL.set_xlabel(r"$R$  [$\Omega$]"); axL.set_ylabel(r"$X$  [$\Omega$]")
+    axL.set_title("impedance plane — unbounded", fontsize=11)
+    axL.grid(True, color=S.GRID_MINOR, lw=0.6)
+    axL.set_facecolor(S.SURFACE)
+    for Z, n in zip(loads, names):
+        if Z.real <= 160 and abs(Z.imag) <= 120:
+            axL.plot(Z.real, Z.imag, "o", ms=7, color=S.SERIES[0],
+                     mec=S.SURFACE, mew=1.4)
+            axL.annotate(n, (Z.real, Z.imag), xytext=(7, 6),
+                         textcoords="offset points", fontsize=10, color=S.INK)
+        else:
+            axL.annotate(f"{n} — off the page\n({Z.real:.0f}{Z.imag:+.0f}j)",
+                         (155, np.clip(Z.imag, -110, 110)), ha="right",
+                         fontsize=8.5, color=S.SERIES[1])
+
+    # --- right: the same loads on the chart ----------------------------------
+    sc = SmithChart(ax=axR, z0=Z0)
+    sc.grid()
+    axR.set_title("Smith chart — everything fits", fontsize=11)
+    for Z, n in zip(loads, names):
+        sc.point(Z / Z0, n, color=S.SERIES[0])
+    plt.tight_layout()
+    return fig
+
+dual(mapping_figure, "mapping")
 ```
 
 The chart is not an approximation, and it is not a chart in the "look up a value
@@ -128,39 +156,43 @@ Learn these landmarks and most of the chart is already readable.
 #| fig-width: 8.4
 #| fig-height: 8.4
 
-sc = SmithChart(figsize=(8.4, 8.4), z0=Z0)
-sc.grid()
+def anatomy_figure():
 
-sc.point(1 + 0j, "MATCHED\n$z=1$, $\\Gamma=0$", color=S.C_TARGET,
-         offset=(0.0, 0.30))
-sc.point(0 + 0j, "SHORT\n$z=0$, $\\Gamma=-1$", color=S.SERIES[1],
-         offset=(0.30, -0.16))
-sc.point(np.inf, "OPEN\n$z=\\infty$, $\\Gamma=+1$", color=S.SERIES[1],
-         offset=(-0.34, -0.16))
-sc.point(0 + 1j, "$z = j1$\npure inductor", color=S.SERIES[0],
-         offset=(0.28, -0.20))
-sc.point(0 - 1j, "$z = -j1$\npure capacitor", color=S.SERIES[0],
-         offset=(0.28, 0.20))
+    sc = SmithChart(figsize=(8.4, 8.4), z0=Z0)
+    sc.grid()
 
-sc.ax.text(-0.34, 0.52, "INDUCTIVE  ($X > 0$)", ha="center",
-           fontsize=10.5, color=S.INK_SOFT, style="italic")
-sc.ax.text(-0.34, -0.52, "CAPACITIVE  ($X < 0$)", ha="center",
-           fontsize=10.5, color=S.INK_SOFT, style="italic")
-sc.ax.text(-0.30, 0.045, "purely resistive axis", ha="center", fontsize=9,
-           color=S.INK_SOFT,
-           bbox=dict(boxstyle="round,pad=0.2", fc=S.SURFACE, ec="none",
-                     alpha=0.9))
-sc.callout("the rim: $|\\Gamma| = 1$\nall the power comes back",
-           xy=(np.cos(np.radians(143)), np.sin(np.radians(143))),
-           xytext=(-0.36, 0.84), color=S.INK_SOFT, ha="center")
-# The |Gamma| arrow lives in the lower right, which is otherwise empty.  Its
-# label carries no leader -- the arrow already points straight at it.
-sc.ax.annotate("", xy=(0.46, -0.46), xytext=(0, 0),
-               arrowprops=dict(arrowstyle="-|>", color=S.INK_SOFT, lw=1.5))
-sc.callout("distance from centre\n$=|\\Gamma|=$ how badly mismatched",
-           xy=(0.46, -0.46), xytext=(0.74, -0.63), color=S.INK_SOFT,
-           ha="center", arrow=False)
-plt.show()
+    sc.point(1 + 0j, "MATCHED\n$z=1$, $\\Gamma=0$", color=S.C_TARGET,
+             offset=(0.0, 0.30))
+    sc.point(0 + 0j, "SHORT\n$z=0$, $\\Gamma=-1$", color=S.SERIES[1],
+             offset=(0.30, -0.16))
+    sc.point(np.inf, "OPEN\n$z=\\infty$, $\\Gamma=+1$", color=S.SERIES[1],
+             offset=(-0.34, -0.16))
+    sc.point(0 + 1j, "$z = j1$\npure inductor", color=S.SERIES[0],
+             offset=(0.28, -0.20))
+    sc.point(0 - 1j, "$z = -j1$\npure capacitor", color=S.SERIES[0],
+             offset=(0.28, 0.20))
+
+    sc.ax.text(-0.34, 0.52, "INDUCTIVE  ($X > 0$)", ha="center",
+               fontsize=10.5, color=S.INK_SOFT, style="italic")
+    sc.ax.text(-0.34, -0.52, "CAPACITIVE  ($X < 0$)", ha="center",
+               fontsize=10.5, color=S.INK_SOFT, style="italic")
+    sc.ax.text(-0.30, 0.045, "purely resistive axis", ha="center", fontsize=9,
+               color=S.INK_SOFT,
+               bbox=dict(boxstyle="round,pad=0.2", fc=S.SURFACE, ec="none",
+                         alpha=0.9))
+    sc.callout("the rim: $|\\Gamma| = 1$\nall the power comes back",
+               xy=(np.cos(np.radians(143)), np.sin(np.radians(143))),
+               xytext=(-0.36, 0.84), color=S.INK_SOFT, ha="center")
+    # The |Gamma| arrow lives in the lower right, which is otherwise empty.  Its
+    # label carries no leader -- the arrow already points straight at it.
+    sc.ax.annotate("", xy=(0.46, -0.46), xytext=(0, 0),
+                   arrowprops=dict(arrowstyle="-|>", color=S.INK_SOFT, lw=1.5))
+    sc.callout("distance from centre\n$=|\\Gamma|=$ how badly mismatched",
+               xy=(0.46, -0.46), xytext=(0.74, -0.63), color=S.INK_SOFT,
+               ha="center", arrow=False)
+    return sc.fig
+
+dual(anatomy_figure, "anatomy")
 ```
 
 | Where you are | What it means |
@@ -187,45 +219,49 @@ algebra of $\Gamma = (z-1)/(z+1)$.
 #| fig-width: 11
 #| fig-height: 5.6
 
-fig, (a1, a2) = plt.subplots(1, 2, figsize=(11, 5.6))
+def grid_families_figure():
 
-s1 = SmithChart(ax=a1, z0=Z0)
-a1.plot(*(lambda g: (g.real, g.imag))(geo.unit_circle()),
-        color=S.RIM, lw=S.LW_RIM)
-a1.plot([-1, 1], [0, 0], color=S.GRID_AXIS, lw=0.9)
-for r, lab in [(0.2, "r=0.2"), (0.5, "r=0.5"), (1.0, "r=1"), (2.0, "r=2"),
-               (5.0, "r=5")]:
-    c = geo.resistance_circle(r)
-    a1.plot(c.real, c.imag, color=S.SERIES[0], lw=1.6)
-    g = sm.gamma_from_z(r + 0j)
-    a1.annotate(lab, (g.real, g.imag), xytext=(0, -14),
-                textcoords="offset points", fontsize=8.5, ha="center",
-                color=S.INK,
-                bbox=dict(boxstyle="round,pad=0.18", fc=S.SURFACE,
-                          ec=S.SERIES[0], lw=0.8))
-a1.set_title("constant resistance $r$", fontsize=11)
-a1.text(0, -1.05, "circles: centre $\\frac{r}{1+r}$, radius $\\frac{1}{1+r}$",
-        ha="center", fontsize=9, color=S.INK_SOFT)
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(11, 5.6))
 
-s2 = SmithChart(ax=a2, z0=Z0)
-a2.plot(*(lambda g: (g.real, g.imag))(geo.unit_circle()),
-        color=S.RIM, lw=S.LW_RIM)
-a2.plot([-1, 1], [0, 0], color=S.GRID_AXIS, lw=0.9)
-for x in (0.2, 0.5, 1.0, 2.0, 5.0):
-    for sgn in (+1, -1):
-        arc = geo.reactance_arc(sgn * x)
-        a2.plot(arc.real, arc.imag, color=S.SERIES[1], lw=1.6)
-        g = sm.gamma_from_z(0 + 1j * sgn * x)
-        u = g / abs(g)
-        a2.annotate(f"x={sgn*x:g}", ((g + 0.1 * u).real, (g + 0.1 * u).imag),
-                    fontsize=8, ha="center", va="center", color=S.INK,
-                    bbox=dict(boxstyle="round,pad=0.15", fc=S.SURFACE,
-                              ec=S.SERIES[1], lw=0.8))
-a2.set_title("constant reactance $x$", fontsize=11)
-a2.text(0, -1.05, "arcs: centre $1 + j\\frac{1}{x}$, radius $\\frac{1}{|x|}$",
-        ha="center", fontsize=9, color=S.INK_SOFT)
-plt.tight_layout()
-plt.show()
+    s1 = SmithChart(ax=a1, z0=Z0)
+    a1.plot(*(lambda g: (g.real, g.imag))(geo.unit_circle()),
+            color=S.RIM, lw=S.LW_RIM)
+    a1.plot([-1, 1], [0, 0], color=S.GRID_AXIS, lw=0.9)
+    for r, lab in [(0.2, "r=0.2"), (0.5, "r=0.5"), (1.0, "r=1"), (2.0, "r=2"),
+                   (5.0, "r=5")]:
+        c = geo.resistance_circle(r)
+        a1.plot(c.real, c.imag, color=S.SERIES[0], lw=1.6)
+        g = sm.gamma_from_z(r + 0j)
+        a1.annotate(lab, (g.real, g.imag), xytext=(0, -14),
+                    textcoords="offset points", fontsize=8.5, ha="center",
+                    color=S.INK,
+                    bbox=dict(boxstyle="round,pad=0.18", fc=S.SURFACE,
+                              ec=S.SERIES[0], lw=0.8))
+    a1.set_title("constant resistance $r$", fontsize=11)
+    a1.text(0, -1.05, "circles: centre $\\frac{r}{1+r}$, radius $\\frac{1}{1+r}$",
+            ha="center", fontsize=9, color=S.INK_SOFT)
+
+    s2 = SmithChart(ax=a2, z0=Z0)
+    a2.plot(*(lambda g: (g.real, g.imag))(geo.unit_circle()),
+            color=S.RIM, lw=S.LW_RIM)
+    a2.plot([-1, 1], [0, 0], color=S.GRID_AXIS, lw=0.9)
+    for x in (0.2, 0.5, 1.0, 2.0, 5.0):
+        for sgn in (+1, -1):
+            arc = geo.reactance_arc(sgn * x)
+            a2.plot(arc.real, arc.imag, color=S.SERIES[1], lw=1.6)
+            g = sm.gamma_from_z(0 + 1j * sgn * x)
+            u = g / abs(g)
+            a2.annotate(f"x={sgn*x:g}", ((g + 0.1 * u).real, (g + 0.1 * u).imag),
+                        fontsize=8, ha="center", va="center", color=S.INK,
+                        bbox=dict(boxstyle="round,pad=0.15", fc=S.SURFACE,
+                                  ec=S.SERIES[1], lw=0.8))
+    a2.set_title("constant reactance $x$", fontsize=11)
+    a2.text(0, -1.05, "arcs: centre $1 + j\\frac{1}{x}$, radius $\\frac{1}{|x|}$",
+            ha="center", fontsize=9, color=S.INK_SOFT)
+    plt.tight_layout()
+    return fig
+
+dual(grid_families_figure, "grid_families")
 ```
 
 Every point on the chart is the intersection of one circle from each family. To
@@ -255,56 +291,60 @@ predictable motion on the chart.
 #| fig-width: 14
 #| fig-height: 5.0
 
-z_start = 0.5 - 0.8j
-fig, axs = plt.subplots(1, 3, figsize=(14, 5.0))
+def three_moves_figure():
 
-# 1. series element -------------------------------------------------------
-sa = SmithChart(ax=axs[0], z0=Z0)
-sa.grid(labels=False)
-axs[0].set_title("series element\n→ ride the constant-$r$ circle",
-                 fontsize=11, color=S.C_SERIES_EL)
-z_end = z_start + 1.3j
-c = geo.resistance_circle(z_start.real)
-axs[0].plot(c.real, c.imag, color=S.C_SERIES_EL, lw=1.0, alpha=0.4, ls="--")
-sa.point(z_start, "start", color=S.C_LOAD, offset=(0.30, -0.16))
-sa.move(z_start, z_end, kind="resistance", label="+ series $L$", arrows=2,
-        label_offset=(-0.34, -0.05))
-sa.point(z_end, "end", color=S.C_SERIES_EL, offset=(0.18, 0.24))
-axs[0].text(0, -1.10, "$r$ cannot change — only $x$ moves",
-            ha="center", fontsize=9, color=S.INK_SOFT)
+    z_start = 0.5 - 0.8j
+    fig, axs = plt.subplots(1, 3, figsize=(14, 5.0))
 
-# 2. shunt element --------------------------------------------------------
-sb = SmithChart(ax=axs[1], z0=Z0)
-sb.grid(labels=False)
-axs[1].set_title("shunt element\n→ ride the constant-$g$ circle",
-                 fontsize=11, color=S.C_SHUNT_EL)
-y_start = 1 / z_start
-z_end2 = 1 / (y_start + 1.6j)
-cc = geo.conductance_circle(y_start.real)
-axs[1].plot(cc.real, cc.imag, color=S.C_SHUNT_EL, lw=1.0, alpha=0.4, ls="--")
-sb.point(z_start, "start", color=S.C_LOAD, offset=(0.32, 0.10))
-sb.move(z_start, z_end2, kind="conductance", label="+ shunt $C$", arrows=2,
-        label_offset=(0.10, 0.30))
-sb.point(z_end2, "end", color=S.C_SHUNT_EL, offset=(-0.22, -0.22))
-axs[1].text(0, -1.10, "$g$ cannot change — only $b$ moves",
-            ha="center", fontsize=9, color=S.INK_SOFT)
+    # 1. series element -------------------------------------------------------
+    sa = SmithChart(ax=axs[0], z0=Z0)
+    sa.grid(labels=False)
+    axs[0].set_title("series element\n→ ride the constant-$r$ circle",
+                     fontsize=11, color=S.C_SERIES_EL)
+    z_end = z_start + 1.3j
+    c = geo.resistance_circle(z_start.real)
+    axs[0].plot(c.real, c.imag, color=S.C_SERIES_EL, lw=1.0, alpha=0.4, ls="--")
+    sa.point(z_start, "start", color=S.C_LOAD, offset=(0.30, -0.16))
+    sa.move(z_start, z_end, kind="resistance", label="+ series $L$", arrows=2,
+            label_offset=(-0.34, -0.05))
+    sa.point(z_end, "end", color=S.C_SERIES_EL, offset=(0.18, 0.24))
+    axs[0].text(0, -1.10, "$r$ cannot change — only $x$ moves",
+                ha="center", fontsize=9, color=S.INK_SOFT)
 
-# 3. transmission line ----------------------------------------------------
-scc = SmithChart(ax=axs[2], z0=Z0)
-scc.grid(labels=False)
-axs[2].set_title("length of line\n→ rotate about the centre",
-                 fontsize=11, color=S.C_LINE)
-scc.vswr_circle(sm.vswr(sm.gamma_from_z(z_start)), color=S.C_LINE, ls="--",
-                lw=1.0)
-scc.point(z_start, "load", color=S.C_LOAD, offset=(0.32, -0.12))
-z_end3 = scc.line_sweep(z_start, 0.18, label="0.18 $\\lambda$ of line",
-                        arrows=2)
-scc.point(z_end3, "what the\nsource sees", color=S.C_LINE, offset=(0.34, 0.14))
-scc.rotation_arrow(start_deg=62, sweep_deg=-52)
-axs[2].text(0, -1.10, "$|\\Gamma|$ cannot change — only its angle",
-            ha="center", fontsize=9, color=S.INK_SOFT)
-plt.tight_layout()
-plt.show()
+    # 2. shunt element --------------------------------------------------------
+    sb = SmithChart(ax=axs[1], z0=Z0)
+    sb.grid(labels=False)
+    axs[1].set_title("shunt element\n→ ride the constant-$g$ circle",
+                     fontsize=11, color=S.C_SHUNT_EL)
+    y_start = 1 / z_start
+    z_end2 = 1 / (y_start + 1.6j)
+    cc = geo.conductance_circle(y_start.real)
+    axs[1].plot(cc.real, cc.imag, color=S.C_SHUNT_EL, lw=1.0, alpha=0.4, ls="--")
+    sb.point(z_start, "start", color=S.C_LOAD, offset=(0.32, 0.10))
+    sb.move(z_start, z_end2, kind="conductance", label="+ shunt $C$", arrows=2,
+            label_offset=(0.10, 0.30))
+    sb.point(z_end2, "end", color=S.C_SHUNT_EL, offset=(-0.22, -0.22))
+    axs[1].text(0, -1.10, "$g$ cannot change — only $b$ moves",
+                ha="center", fontsize=9, color=S.INK_SOFT)
+
+    # 3. transmission line ----------------------------------------------------
+    scc = SmithChart(ax=axs[2], z0=Z0)
+    scc.grid(labels=False)
+    axs[2].set_title("length of line\n→ rotate about the centre",
+                     fontsize=11, color=S.C_LINE)
+    scc.vswr_circle(sm.vswr(sm.gamma_from_z(z_start)), color=S.C_LINE, ls="--",
+                    lw=1.0)
+    scc.point(z_start, "load", color=S.C_LOAD, offset=(0.32, -0.12))
+    z_end3 = scc.line_sweep(z_start, 0.18, label="0.18 $\\lambda$ of line",
+                            arrows=2)
+    scc.point(z_end3, "what the\nsource sees", color=S.C_LINE, offset=(0.34, 0.14))
+    scc.rotation_arrow(start_deg=62, sweep_deg=-52)
+    axs[2].text(0, -1.10, "$|\\Gamma|$ cannot change — only its angle",
+                ha="center", fontsize=9, color=S.INK_SOFT)
+    plt.tight_layout()
+    return fig
+
+dual(three_moves_figure, "three_moves")
 ```
 
 ## Move 1 — a series element
@@ -331,22 +371,26 @@ mentally flip through the centre. `smithlib` just does the arithmetic:
 ```{python}
 #| label: fig-yz
 #| fig-cap: "The impedance point and its admittance are the same distance from the centre, on exactly opposite sides. Reflecting through the centre is how a shunt element gets handled on an impedance grid."
-sc_demo = SmithChart(figsize=(7.0, 7.0), z0=Z0,
-                     title="the $Y$ grid is the $Z$ grid, rotated $180°$")
-sc_demo.grid()
-sc_demo.admittance_grid(alpha=0.45)
-z_a = 0.5 - 0.8j
-sc_demo.point(z_a, "$z = 0.5 - j0.8$", color=S.C_LOAD, offset=(-0.34, -0.16))
-sc_demo.point(1 / z_a, "$y = 1/z$\n(same point,\nother grid)",
-              color=S.ACCENT, offset=(0.20, 0.26))
-sc_demo.ax.plot([sm.gamma_from_z(z_a).real, sm.gamma_from_z(1 / z_a).real],
-                [sm.gamma_from_z(z_a).imag, sm.gamma_from_z(1 / z_a).imag],
-                color=S.ACCENT, lw=1.2, ls=":", zorder=4)
-# Marking the centre makes it obvious the dotted line runs straight through it.
-sc_demo.ax.plot([0], [0], "+", ms=13, mew=1.8, color=S.INK, zorder=6)
-sc_demo.ax.annotate("centre", (0, 0), xytext=(10, -14),
-                    textcoords="offset points", fontsize=8.5, color=S.INK_SOFT)
-plt.show()
+
+def yz_figure():
+    sc_demo = SmithChart(figsize=(7.0, 7.0), z0=Z0,
+                         title="the $Y$ grid is the $Z$ grid, rotated $180°$")
+    sc_demo.grid()
+    sc_demo.admittance_grid(alpha=0.45)
+    z_a = 0.5 - 0.8j
+    sc_demo.point(z_a, "$z = 0.5 - j0.8$", color=S.C_LOAD, offset=(-0.34, -0.16))
+    sc_demo.point(1 / z_a, "$y = 1/z$\n(same point,\nother grid)",
+                  color=S.ACCENT, offset=(0.20, 0.26))
+    sc_demo.ax.plot([sm.gamma_from_z(z_a).real, sm.gamma_from_z(1 / z_a).real],
+                    [sm.gamma_from_z(z_a).imag, sm.gamma_from_z(1 / z_a).imag],
+                    color=S.ACCENT, lw=1.2, ls=":", zorder=4)
+    # Marking the centre makes it obvious the dotted line runs straight through it.
+    sc_demo.ax.plot([0], [0], "+", ms=13, mew=1.8, color=S.INK, zorder=6)
+    sc_demo.ax.annotate("centre", (0, 0), xytext=(10, -14),
+                        textcoords="offset points", fontsize=8.5, color=S.INK_SOFT)
+    return sc_demo.fig
+
+dual(yz_figure, "yz")
 ```
 
 Note that the $z \rightarrow y$ point is the *diametric opposite* through the
@@ -383,16 +427,20 @@ matched, which is a trap worth seeing once:
 #| fig-width: 7.2
 #| fig-height: 7.2
 
-sc_l = SmithChart(figsize=(7.2, 7.2), z0=Z0,
-                  title="lossy line: the mismatch *looks* like it improves")
-sc_l.grid()
-sc_l.vswr_circle(sm.vswr(sm.gamma_from_z(z_load)), label="lossless VSWR")
-sc_l.point(z_load, "load", color=S.C_LOAD, offset=(-0.30, -0.18))
-z_far = sc_l.line_sweep(z_load, 2.0, alpha_np_per_wl=0.18, arrows=3,
-                        label="2 $\\lambda$ of lossy cable")
-sc_l.point(z_far, "at the\nsource end", color=S.C_LINE, offset=(0.26, 0.20))
-sc_l.legend()
-plt.show()
+def lossy_figure():
+
+    sc_l = SmithChart(figsize=(7.2, 7.2), z0=Z0,
+                      title="lossy line: the mismatch *looks* like it improves")
+    sc_l.grid()
+    sc_l.vswr_circle(sm.vswr(sm.gamma_from_z(z_load)), label="lossless VSWR")
+    sc_l.point(z_load, "load", color=S.C_LOAD, offset=(-0.30, -0.18))
+    z_far = sc_l.line_sweep(z_load, 2.0, alpha_np_per_wl=0.18, arrows=3,
+                            label="2 $\\lambda$ of lossy cable")
+    sc_l.point(z_far, "at the\nsource end", color=S.C_LINE, offset=(0.26, 0.20))
+    sc_l.legend()
+    return sc_l.fig
+
+dual(lossy_figure, "lossy")
 ```
 
 # Reading a mismatch: VSWR and return loss
@@ -406,23 +454,31 @@ is a constant-VSWR circle, and each corresponds to one return-loss figure.
 #| fig-width: 7.4
 #| fig-height: 7.4
 
-sc_v = SmithChart(figsize=(7.4, 7.4), z0=Z0, title="how bad is this mismatch?")
-sc_v.grid()
-sc_v.shade_gamma(10 ** (-10 / 20), alpha=0.13)     # RL >= 10 dB
-for s_ in (1.5, 2.0, 3.0, 5.0):
-    sc_v.vswr_circle(s_)
-    mag = (s_ - 1) / (s_ + 1)
-    sc_v.ax.annotate(f"VSWR {s_:g}\n({sm.return_loss_db(mag):.1f} dB RL)",
-                     xy=(mag * np.cos(np.radians(118)),
-                         mag * np.sin(np.radians(118))),
-                     fontsize=8, ha="center", va="center", color=S.INK,
-                     bbox=dict(boxstyle="round,pad=0.2", fc=S.SURFACE,
-                               ec=S.INK_MUTED, lw=0.7, alpha=0.92))
-sc_v.ax.text(0, -0.62, "shaded: $RL \\geq 10$ dB\n(the usual pass/fail disc)",
-             ha="center", fontsize=9.5, color=S.C_TARGET)
-sc_v.point(25 - 40j, "our load", color=S.C_LOAD, offset=(0.30, -0.22))
-sc_v.readout((25 - 40j) / Z0)
-plt.show()
+def vswr_figure():
+
+    sc_v = SmithChart(figsize=(7.4, 7.4), z0=Z0, title="how bad is this mismatch?")
+    sc_v.grid()
+    sc_v.shade_gamma(10 ** (-10 / 20), alpha=0.13)     # RL >= 10 dB
+    # Fan the labels out around the circles so the boxes do not stack.
+    for s_, ang in zip((1.5, 2.0, 3.0, 5.0), (150, 128, 108, 92)):
+        sc_v.vswr_circle(s_)
+        mag = (s_ - 1) / (s_ + 1)
+        sc_v.ax.annotate(f"VSWR {s_:g}\n({sm.return_loss_db(mag):.1f} dB RL)",
+                         xy=(mag * np.cos(np.radians(ang)),
+                             mag * np.sin(np.radians(ang))),
+                         fontsize=8, ha="center", va="center", color=S.INK,
+                         bbox=dict(boxstyle="round,pad=0.2", fc=S.SURFACE,
+                                   ec=S.INK_MUTED, lw=0.7, alpha=0.92))
+    sc_v.callout("shaded: $RL \\geq 10$ dB\n(the usual pass/fail disc)",
+                 xy=(0.24, -0.21), xytext=(0.62, -0.60), color=S.C_TARGET,
+                 ha="center", fontsize=9)
+    # point() takes a NORMALIZED impedance, so divide by Z0.
+    z_load = (25 - 40j) / Z0
+    sc_v.point(z_load, "our load", color=S.C_LOAD, offset=(-0.34, -0.20))
+    sc_v.readout(z_load)
+    return sc_v.fig
+
+dual(vswr_figure, "vswr")
 ```
 
 ```{python}
@@ -462,28 +518,33 @@ for i, m in enumerate(solutions):
 #| fig-width: 13.5
 #| fig-height: 6.8
 
-fig, axs = plt.subplots(1, 2, figsize=(13.5, 6.8))
 picks = [solutions[0], solutions[-1]]
 offs = [[(-0.34, 0.02), (-0.34, 0.06)], [(0.34, -0.06), (-0.34, 0.10)]]
 
-for ax, m, off in zip(axs, picks, offs):
-    s = SmithChart(ax=ax, z0=Z0)
-    s.grid(labels=False)
-    # the two "runways" that pass through the centre
-    ax.plot(*(lambda g: (g.real, g.imag))(geo.resistance_circle(1.0)),
-            color=S.C_SERIES_EL, lw=1.1, ls="--", alpha=0.45)
-    ax.plot(*(lambda g: (g.real, g.imag))(geo.conductance_circle(1.0)),
-            color=S.C_SHUNT_EL, lw=1.1, ls="--", alpha=0.45)
-    s.point(m.z_load, "load\n$25 - j40$", color=S.C_LOAD, offset=(0.16, -0.34))
-    s.path(m.steps, m.z_load, offsets=off)
-    s.point(1 + 0j, "$50\\,\\Omega$", color=S.C_TARGET, offset=(0.26, 0.20))
-    txt = "\n".join(f"{role}: {t}" for role, _, _, t in m.components())
-    ax.set_title(f"{m.topology}\n{txt}", fontsize=10.5)
-axs[0].text(0, -1.16, "dashed blue = $r=1$ circle,  dashed orange = $g=1$ circle"
-            "  —  the only two runways into the centre",
-            ha="center", fontsize=9, color=S.INK_SOFT)
-plt.tight_layout()
-plt.show()
+def lmatch_figure():
+
+    fig, axs = plt.subplots(1, 2, figsize=(13.5, 6.8))
+
+    for ax, m, off in zip(axs, picks, offs):
+        s = SmithChart(ax=ax, z0=Z0)
+        s.grid(labels=False)
+        # the two "runways" that pass through the centre
+        ax.plot(*(lambda g: (g.real, g.imag))(geo.resistance_circle(1.0)),
+                color=S.C_SERIES_EL, lw=1.1, ls="--", alpha=0.45)
+        ax.plot(*(lambda g: (g.real, g.imag))(geo.conductance_circle(1.0)),
+                color=S.C_SHUNT_EL, lw=1.1, ls="--", alpha=0.45)
+        s.point(m.z_load, "load\n$25 - j40$", color=S.C_LOAD, offset=(0.16, -0.34))
+        s.path(m.steps, m.z_load, offsets=off)
+        s.point(1 + 0j, "$50\\,\\Omega$", color=S.C_TARGET, offset=(0.26, 0.20))
+        txt = "\n".join(f"{role}: {t}" for role, _, _, t in m.components())
+        ax.set_title(f"{m.topology}\n{txt}", fontsize=10.5)
+    axs[0].text(0, -1.16, "dashed blue = $r=1$ circle,  dashed orange = $g=1$ circle"
+                "  —  the only two runways into the centre",
+                ha="center", fontsize=9, color=S.INK_SOFT)
+    plt.tight_layout()
+    return fig
+
+dual(lmatch_figure, "lmatch")
 ```
 
 Verify it, rather than trusting the picture:
@@ -520,23 +581,27 @@ same whichever network you pick, so it tells you nothing about the choice.
 #| fig-height: 6.8
 #| echo: false
 
-fig, axs = plt.subplots(1, 2, figsize=(13.5, 6.8))
-for ax, m in zip(axs, picks):
-    s_ = SmithChart(ax=ax, z0=Z0)
-    s_.grid(labels=False)
-    for q in (1, 2, 3):
-        s_.q_contour(q)
-        arc = geo.q_contour(q)
-        gq = arc[len(arc) // 2]
-        ax.annotate(f"Q={q}", (gq.real, gq.imag), fontsize=7.5,
-                    color=S.ACCENT, ha="center")
-    s_.point(m.z_load, "load", color=S.C_LOAD, offset=(0.16, -0.30))
-    s_.path(m.steps, m.z_load, labels=False)
-    s_.point(m.path[1], "the corner", color=S.ACCENT, offset=(-0.34, 0.04))
-    s_.point(1 + 0j, "", color=S.C_TARGET)
-    ax.set_title(f"{m.topology} — network $Q$ = {m.network_q:.2f}", fontsize=11)
-plt.tight_layout()
-plt.show()
+def q_figure():
+
+    fig, axs = plt.subplots(1, 2, figsize=(13.5, 6.8))
+    for ax, m in zip(axs, picks):
+        s_ = SmithChart(ax=ax, z0=Z0)
+        s_.grid(labels=False)
+        for q in (1, 2, 3):
+            s_.q_contour(q)
+            arc = geo.q_contour(q)
+            gq = arc[len(arc) // 2]
+            ax.annotate(f"Q={q}", (gq.real, gq.imag), fontsize=7.5,
+                        color=S.ACCENT, ha="center")
+        s_.point(m.z_load, "load", color=S.C_LOAD, offset=(0.16, -0.30))
+        s_.path(m.steps, m.z_load, labels=False)
+        s_.point(m.path[1], "the corner", color=S.ACCENT, offset=(-0.34, 0.04))
+        s_.point(1 + 0j, "", color=S.C_TARGET)
+        ax.set_title(f"{m.topology} — network $Q$ = {m.network_q:.2f}", fontsize=11)
+    plt.tight_layout()
+    return fig
+
+dual(q_figure, "q")
 ```
 
 But $Q$ is only a first-order guide, and it is worth seeing exactly how far it
@@ -584,33 +649,38 @@ for i, mm in enumerate(solutions):
 #| fig-height: 4.6
 #| echo: false
 
-fig, axs = plt.subplots(1, 2, figsize=(12.5, 4.6), sharey=True)
-by_topo = {}
-for mm in solutions:
-    by_topo.setdefault(mm.topology, []).append(mm)
+def bandwidth_figure():
 
-for ax, (topo, group) in zip(axs, by_topo.items()):
-    for mm, colour in zip(group, S.SERIES[:2]):
-        net = build(mm)
-        rl = sm.return_loss_db(sm.gamma_from_Z(net.sweep(fsweep), Z0))
-        parts = " + ".join(t for _, _, _, t in mm.components())
-        ax.plot(fsweep / 1e9, rl, color=colour, lw=2.0,
-                label=f"{parts}  ({bandwidth_10db(net, fsweep):.0f} MHz)")
-    ax.axhline(10, color=S.C_TARGET, lw=1.3, ls="--")
-    ax.axvline(1.0, color=S.INK_MUTED, lw=1.0, ls=":")
-    ax.set_title(f"{topo}  —  network $Q$ = {group[0].network_q:.2f}",
-                 fontsize=11)
-    ax.set_xlabel("frequency (GHz)")
-    ax.set_ylim(40, 0)
-    ax.grid(True, color=S.GRID_MINOR, lw=0.6)
-    ax.set_facecolor(S.SURFACE)
-    ax.legend(fontsize=8.5, loc="lower right", facecolor=S.SURFACE,
-              edgecolor=S.GRID_MAJOR)
-axs[0].set_ylabel("return loss (dB)")
-axs[0].annotate("10 dB spec", (0.30, 8.4), fontsize=8.5, color=S.C_TARGET,
-                va="bottom")
-plt.tight_layout()
-plt.show()
+    fig, axs = plt.subplots(1, 2, figsize=(12.5, 4.6), sharey=True)
+    by_topo = {}
+    for mm in solutions:
+        by_topo.setdefault(mm.topology, []).append(mm)
+
+    for ax, (topo, group) in zip(axs, by_topo.items()):
+        for mm, colour in zip(group, S.SERIES[:2]):
+            net = build(mm)
+            rl = sm.return_loss_db(sm.gamma_from_Z(net.sweep(fsweep), Z0))
+            parts = " + ".join(t for _, _, _, t in mm.components())
+            ax.plot(fsweep / 1e9, rl, color=colour, lw=2.0,
+                    label=f"{parts}  ({bandwidth_10db(net, fsweep):.0f} MHz)")
+        ax.axhline(10, color=S.C_TARGET, lw=1.3, ls="--")
+        ax.axvline(1.0, color=S.INK_MUTED, lw=1.0, ls=":")
+        ax.set_title(f"{topo}  —  network $Q$ = {group[0].network_q:.2f}",
+                     fontsize=11)
+        ax.set_xlabel("frequency (GHz)")
+        ax.set_ylim(40, 0)
+        ax.grid(True, color=S.GRID_MINOR, lw=0.6)
+        ax.set_facecolor(S.SURFACE)
+        ax.legend(fontsize=8.5, loc="lower right", facecolor=S.SURFACE,
+                  edgecolor=S.GRID_MAJOR)
+    axs[0].set_ylabel("return loss (dB)")
+    # Prose wears an ink token; the dashed line beside it carries the colour.
+    axs[0].annotate("10 dB spec", (0.30, 8.4), fontsize=8.5, color=S.INK_SOFT,
+                    va="bottom")
+    plt.tight_layout()
+    return fig
+
+dual(bandwidth_figure, "bandwidth")
 ```
 
 So the honest rule is narrower than the folklore:
@@ -654,24 +724,28 @@ for s_ in stubs:
 #| fig-width: 13.5
 #| fig-height: 6.8
 
-fig, axs = plt.subplots(1, 2, figsize=(13.5, 6.8))
-for ax, st in zip(axs, stubs):
-    s = SmithChart(ax=ax, z0=Z0)
-    s.grid(labels=False)
-    ax.plot(*(lambda g: (g.real, g.imag))(geo.conductance_circle(1.0)),
-            color=S.C_SHUNT_EL, lw=1.3, ls="--", alpha=0.55)
-    ax.annotate("$g=1$ circle", xy=(-0.70, -0.30), fontsize=8.5,
-                color=S.C_SHUNT_EL, ha="center")
-    s.vswr_circle(sm.vswr(sm.gamma_from_Z(ZL, Z0)), lw=1.0)
-    s.point(st.z_load, "load", color=S.C_LOAD, offset=(-0.16, -0.30))
-    s.path(st.steps, st.z_load,
-           offsets=[(0.34, -0.10), (-0.30, 0.18)])
-    s.point(st.z_at_stub, "", color=S.C_LINE)
-    s.point(1 + 0j, "$50\\,\\Omega$", color=S.C_TARGET, offset=(0.26, 0.22))
-    ax.set_title(f"line $d = {st.d_wl:.4f}\\lambda$,  "
-                 f"open stub $\\ell = {st.l_wl:.4f}\\lambda$", fontsize=11)
-plt.tight_layout()
-plt.show()
+def stub_figure():
+
+    fig, axs = plt.subplots(1, 2, figsize=(13.5, 6.8))
+    for ax, st in zip(axs, stubs):
+        s = SmithChart(ax=ax, z0=Z0)
+        s.grid(labels=False)
+        ax.plot(*(lambda g: (g.real, g.imag))(geo.conductance_circle(1.0)),
+                color=S.C_SHUNT_EL, lw=1.3, ls="--", alpha=0.55)
+        ax.annotate("$g=1$ circle", xy=(-0.70, -0.30), fontsize=8.5,
+                    color=S.C_SHUNT_EL, ha="center")
+        s.vswr_circle(sm.vswr(sm.gamma_from_Z(ZL, Z0)), lw=1.0)
+        s.point(st.z_load, "load", color=S.C_LOAD, offset=(-0.16, -0.30))
+        s.path(st.steps, st.z_load,
+               offsets=[(0.34, -0.10), (-0.30, 0.18)])
+        s.point(st.z_at_stub, "", color=S.C_LINE)
+        s.point(1 + 0j, "$50\\,\\Omega$", color=S.C_TARGET, offset=(0.26, 0.22))
+        ax.set_title(f"line $d = {st.d_wl:.4f}\\lambda$,  "
+                     f"open stub $\\ell = {st.l_wl:.4f}\\lambda$", fontsize=11)
+    plt.tight_layout()
+    return fig
+
+dual(stub_figure, "stub")
 ```
 
 The stub length itself is also a chart reading. An open stub starts at the
@@ -684,24 +758,28 @@ the short-circuit point. Where you stop is the susceptance you get.
 #| fig-width: 11
 #| fig-height: 5.6
 
-fig, axs = plt.subplots(1, 2, figsize=(11, 5.6))
-for ax, kind, start in zip(axs, ("open", "short"), (np.inf, 0 + 0j)):
-    s = SmithChart(ax=ax, z0=Z0)
-    s.grid(labels=False)
-    L = np.linspace(0.001, 0.499, 400)
-    g = sm.gamma_from_z(np.array([sm.stub_input_z(d, kind) for d in L]))
-    ax.plot(g.real, g.imag, color=S.C_SHUNT_EL, lw=3.0, alpha=0.85,
-            solid_capstyle="round")
-    s.point(start, f"{kind}\n$\\ell = 0$", color=S.C_LOAD,
-            offset=(-0.34, -0.20) if kind == "open" else (0.34, -0.20))
-    for d in (0.125, 0.25, 0.375):
-        zz = sm.stub_input_z(d, kind)
-        s.point(zz, f"${d}\\lambda$\n$x={zz.imag:+.2f}$", color=S.C_LINE,
-                fontsize=8)
-    s.rotation_arrow(start_deg=60, sweep_deg=-40, text="increasing $\\ell$")
-    ax.set_title(f"{kind}-circuit stub", fontsize=11)
-plt.tight_layout()
-plt.show()
+def stub_length_figure():
+
+    fig, axs = plt.subplots(1, 2, figsize=(11, 5.6))
+    for ax, kind, start in zip(axs, ("open", "short"), (np.inf, 0 + 0j)):
+        s = SmithChart(ax=ax, z0=Z0)
+        s.grid(labels=False)
+        L = np.linspace(0.001, 0.499, 400)
+        g = sm.gamma_from_z(np.array([sm.stub_input_z(d, kind) for d in L]))
+        ax.plot(g.real, g.imag, color=S.C_SHUNT_EL, lw=3.0, alpha=0.85,
+                solid_capstyle="round")
+        s.point(start, f"{kind}\n$\\ell = 0$", color=S.C_LOAD,
+                offset=(-0.34, -0.20) if kind == "open" else (0.34, -0.20))
+        for d in (0.125, 0.25, 0.375):
+            zz = sm.stub_input_z(d, kind)
+            s.point(zz, f"${d}\\lambda$\n$x={zz.imag:+.2f}$", color=S.C_LINE,
+                    fontsize=8)
+        s.rotation_arrow(start_deg=60, sweep_deg=-40, text="increasing $\\ell$")
+        ax.set_title(f"{kind}-circuit stub", fontsize=11)
+    plt.tight_layout()
+    return fig
+
+dual(stub_length_figure, "stub_length")
 ```
 
 # Worked example 3 — the quarter-wave transformer
@@ -727,36 +805,40 @@ print(f"check: Z0qw^2 / R = {qw.z0_transformer**2 / qw.R_real:.4f} ohm")
 #| fig-width: 7.6
 #| fig-height: 7.6
 
-s = SmithChart(figsize=(7.6, 7.6), z0=Z0, title="quarter-wave transformer")
-s.grid()
-s.vswr_circle(sm.vswr(sm.gamma_from_Z(ZL, Z0)), label="load VSWR circle")
-s.point(qw.z_load, "load\n$25-j40$", color=S.C_LOAD, offset=(-0.18, -0.30))
-s.move(qw.z_load, qw.steps[0].z_after, kind="gamma", color=S.C_LINE, arrows=2,
-       label=f"rotate {qw.d_wl:.3f}$\\lambda$", label_offset=(0.36, -0.10))
-s.point(qw.steps[0].z_after, f"purely real\n{qw.R_real:.1f} $\\Omega$",
-        color=S.C_LINE, offset=(-0.10, -0.30))
-# The naive drawing: a rotation about the centre of THIS chart. Wrong.
-s.move(qw.steps[0].z_after, 1 + 0j, kind="gamma", color=S.INK_MUTED, arrows=0,
-       ls="--", lw=1.4)
+def qw_figure():
 
-# The true path inside the transformer. Inside a section of characteristic
-# impedance Z0qw the locus is a circle about Z0qw, so step along the actual
-# line and convert each impedance back to this chart's 50-ohm reference.
-lam_qw = 3e8 / f0
-lengths = np.linspace(0, 0.25, 240) * lam_qw
-Z_start = qw.steps[0].z_after * Z0
-Z_true = np.array([complex(Line(l, qw.z0_transformer).apply(Z_start, f0))
-                   for l in lengths])
-s.curve(Z_true / Z0, color=S.C_TARGET, arrows=2,
-        label=f"$\\lambda/4$ of {qw.z0_transformer:.1f} $\\Omega$ line",
-        label_offset=(0.10, 0.30))
-s.point(1 + 0j, "matched", color=S.C_TARGET, offset=(0.30, 0.14))
-s.callout("rotating about the $50\\,\\Omega$ centre:\n"
-          "wrong path, right endpoints",
-          xy=(-0.16, 0.46), xytext=(-0.52, 0.84), color=S.INK_MUTED,
-          ha="center", fontsize=8.5)
-s.legend()
-plt.show()
+    s = SmithChart(figsize=(7.6, 7.6), z0=Z0, title="quarter-wave transformer")
+    s.grid()
+    s.vswr_circle(sm.vswr(sm.gamma_from_Z(ZL, Z0)), label="load VSWR circle")
+    s.point(qw.z_load, "load\n$25-j40$", color=S.C_LOAD, offset=(-0.18, -0.30))
+    s.move(qw.z_load, qw.steps[0].z_after, kind="gamma", color=S.C_LINE, arrows=2,
+           label=f"rotate {qw.d_wl:.3f}$\\lambda$", label_offset=(0.36, -0.10))
+    s.point(qw.steps[0].z_after, f"purely real\n{qw.R_real:.1f} $\\Omega$",
+            color=S.C_LINE, offset=(-0.10, -0.30))
+    # The naive drawing: a rotation about the centre of THIS chart. Wrong.
+    s.move(qw.steps[0].z_after, 1 + 0j, kind="gamma", color=S.INK_MUTED, arrows=0,
+           ls="--", lw=1.4)
+
+    # The true path inside the transformer. Inside a section of characteristic
+    # impedance Z0qw the locus is a circle about Z0qw, so step along the actual
+    # line and convert each impedance back to this chart's 50-ohm reference.
+    lam_qw = 3e8 / f0
+    lengths = np.linspace(0, 0.25, 240) * lam_qw
+    Z_start = qw.steps[0].z_after * Z0
+    Z_true = np.array([complex(Line(l, qw.z0_transformer).apply(Z_start, f0))
+                       for l in lengths])
+    s.curve(Z_true / Z0, color=S.C_TARGET, arrows=2,
+            label=f"$\\lambda/4$ of {qw.z0_transformer:.1f} $\\Omega$ line",
+            label_offset=(0.10, 0.30))
+    s.point(1 + 0j, "matched", color=S.C_TARGET, offset=(0.30, 0.14))
+    s.callout("rotating about the $50\\,\\Omega$ centre:\n"
+              "wrong path, right endpoints",
+              xy=(-0.16, 0.46), xytext=(-0.52, 0.84), color=S.INK_MUTED,
+              ha="center", fontsize=8.5)
+    s.legend()
+    return s.fig
+
+dual(qw_figure, "qw")
 ```
 
 Notice the two green-and-grey paths. **Inside** a section whose characteristic
@@ -782,26 +864,30 @@ Smith chart gets used for day to day.
 #| fig-width: 7.6
 #| fig-height: 7.6
 
-R, L, C = 35.0, 8e-9, 3.17e-12          # resonant near 1 GHz
-freqs = np.linspace(0.7e9, 1.3e9, 601)
+def sweep_figure():
 
-def z_series_rlc(f):
-    w = 2 * np.pi * f
-    return (R + 1j * (w * L - 1 / (w * C))) / Z0
+    R, L, C = 35.0, 8e-9, 3.17e-12          # resonant near 1 GHz
+    freqs = np.linspace(0.7e9, 1.3e9, 601)
 
-s = SmithChart(figsize=(7.6, 7.6), z0=Z0,
-               title="series RLC swept 0.7 → 1.3 GHz")
-s.grid()
-s.shade_gamma(10 ** (-10 / 20), alpha=0.12)
-s.frequency_sweep(z_series_rlc, freqs, mark_every=100, label="$S_{11}$ locus")
-f_res = 1 / (2 * np.pi * np.sqrt(L * C))
-s.point(z_series_rlc(f_res), f"resonance\n{f_res/1e9:.3f} GHz",
-        color=S.C_SHUNT_EL, offset=(-0.40, 0.16))
-s.callout("inside the shaded disc\n= better than 10 dB return loss",
-          xy=(0.22, -0.16), xytext=(0.50, -0.76), color=S.C_TARGET,
-          ha="center")
-s.legend()
-plt.show()
+    def z_series_rlc(f):
+        w = 2 * np.pi * f
+        return (R + 1j * (w * L - 1 / (w * C))) / Z0
+
+    s = SmithChart(figsize=(7.6, 7.6), z0=Z0,
+                   title="series RLC swept 0.7 → 1.3 GHz")
+    s.grid()
+    s.shade_gamma(10 ** (-10 / 20), alpha=0.12)
+    s.frequency_sweep(z_series_rlc, freqs, mark_every=100, label="$S_{11}$ locus")
+    f_res = 1 / (2 * np.pi * np.sqrt(L * C))
+    s.point(z_series_rlc(f_res), f"resonance\n{f_res/1e9:.3f} GHz",
+            color=S.C_SHUNT_EL, offset=(-0.40, 0.16))
+    s.callout("inside the shaded disc\n= better than 10 dB return loss",
+              xy=(0.22, -0.16), xytext=(0.50, -0.76), color=S.C_TARGET,
+              ha="center")
+    s.legend()
+    return s.fig
+
+dual(sweep_figure, "sweep")
 ```
 
 Three habits worth building:

@@ -8,8 +8,10 @@ Three pieces, in the order they are useful:
 | Piece | What it is |
 |---|---|
 | [`docs/smith-chart.qmd`](docs/smith-chart.qmd) | The tutorial. What the chart is, why it exists, and worked examples with the moves drawn as arrows on the chart. |
-| [`smithlib/`](smithlib/) | The maths. Reflection coefficients, transmission lines, matching-network synthesis, and two chart renderers. |
+| [`smithlib/`](smithlib/) | The math. Reflection coefficients, transmission lines, matching-network synthesis, and two chart renderers. |
 | [`app/app.py`](app/app.py) | An interactive workbench built on `smithlib`. |
+
+Both the document and the app have a dark mode — see [Themes](#themes).
 
 ## Quick start
 
@@ -23,6 +25,12 @@ python3 -m venv .venv
 cd docs && quarto render smith-chart.qmd      # the tutorial (needs Quarto)
 ```
 
+Rendering writes both themes' figures into `docs/figures/` (git-ignored).
+
+```bash
+make venv && make test && make docs && make app
+```
+
 Rendering the docs needs the venv's Python. If Quarto picks the wrong one:
 
 ```bash
@@ -34,7 +42,7 @@ QUARTO_PYTHON=$PWD/.venv/bin/python quarto render docs/smith-chart.qmd
 
 ## Why it is laid out this way
 
-The maths is deliberately separate from every user interface. `core`, `tline`,
+The math is deliberately separate from every user interface. `core`, `tline`,
 `matching` and `network` import nothing but numpy, so they work equally well in
 a measurement script, a notebook, the Quarto document, or the app. The chart
 renderers sit on top and are interchangeable:
@@ -45,6 +53,7 @@ tline.py     motion along lines, stubs                    numpy only
 matching.py  L-network / stub / quarter-wave solvers      numpy only
 network.py   cascadable element chain + frequency sweep   numpy only
 geometry.py  the chart's circles and arcs, as arrays      numpy only
+style.py     light and dark palettes, one set of roles    no deps
   chart.py         matplotlib renderer  -> print, docs
   plotly_chart.py  Plotly renderer      -> the app
 ```
@@ -87,6 +96,44 @@ sc.point(ZL / Z0, "load", show_value=True)
 sc.path(m.steps, ZL / Z0)                      # arcs + arrowheads + labels
 sc.point(1 + 0j, "matched")
 ```
+
+## Themes
+
+Colour lives in one place, [`smithlib/style.py`](smithlib/style.py), as two
+palettes over one set of semantic roles — `C_LOAD` (where a design starts),
+`C_TARGET` (the matched centre), and one colour each for the three moves a
+Smith chart can express. Renderers ask for roles, never for hex, so neither
+theme can drift out of step with the other.
+
+```python
+from smithlib import style as S
+
+with S.theme("dark"):          # for scripts and the docs
+    fig = draw_something()
+
+P = S.palette("dark")          # a snapshot, for code that must not touch globals
+SmithFigure(palette=P, z0=50)
+```
+
+**The document** gets a light/dark toggle in the Quarto navbar. Baked PNGs
+cannot restyle themselves, so every figure is rendered twice — once per palette
+— and emitted as a pair of images that `docs/styles.css` swaps on Quarto's
+`quarto-dark` body class. The `dual()` helper in the document's setup chunk
+does this, which is why each figure is written as a function returning a figure
+rather than as loose script: the drawing has to be repeatable.
+
+Note that Quarto's toggle **ignores the OS colour-scheme preference** and starts
+light until the reader chooses otherwise. The swap CSS is therefore keyed only
+on the body class — honouring `prefers-color-scheme` there would put dark
+figures on a light page.
+
+**The app** follows Streamlit's own theme: change it under *Settings* in the ⋮
+menu and the charts restyle to match. The sidebar has an override if you want
+the charts pinned regardless. Each script run takes one palette snapshot and
+passes it explicitly into every figure, so two browser sessions on different
+themes stay independent. `.streamlit/config.toml` deliberately sets no `base`,
+which leaves Streamlit following the browser preference; set `base = "dark"`
+there to pin it.
 
 ## A note on bandwidth
 

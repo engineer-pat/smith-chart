@@ -36,6 +36,18 @@ PLOT_CFG = {"displaylogo": False,
             "modeBarButtonsToRemove": ["select2d", "lasso2d"]}
 
 
+def detect_streamlit_theme():
+    """Whatever theme Streamlit itself is showing, or None if it cannot say.
+
+    Streamlit reports this from the browser, so it is unset on the very first
+    script run and on older versions -- hence the fallback.
+    """
+    try:
+        return st.context.theme.type
+    except Exception:
+        return None
+
+
 # ==========================================================================
 # session state
 # ==========================================================================
@@ -123,6 +135,17 @@ with st.sidebar:
     freqs = np.linspace(f_lo * 1e9, max(f_hi * 1e9, f_lo * 1e9 * 1.001), n_pts)
 
     st.divider()
+    st.header("Appearance")
+    theme_choice = st.radio(
+        "Chart theme", ["Match Streamlit", "Light", "Dark"], horizontal=True,
+        help="Charts follow Streamlit's own theme by default — change that "
+             "under Settings in the ⋮ menu and the charts follow.")
+    if theme_choice == "Match Streamlit":
+        mode = detect_streamlit_theme() or "light"
+    else:
+        mode = theme_choice.lower()
+
+    st.divider()
     st.header("Chart overlays")
     show_unity_circles = st.checkbox(
         "$r=1$ and $g=1$ circles", value=True,
@@ -142,6 +165,10 @@ with st.sidebar:
     lam0 = C0 / (f0 * np.sqrt(eps_eff))
     st.caption(f"λ at {f0_ghz:g} GHz = {lam0 * 1000:.2f} mm")
 
+
+# One snapshot per script run, passed explicitly into every figure, so two
+# browser sessions on different themes cannot tread on each other.
+P = S.palette(mode)
 
 gL = sm.gamma_from_Z(ZL, z0)
 zL = ZL / z0
@@ -175,18 +202,20 @@ def sweep_panel(net, title, extra=None):
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=freqs / 1e9, y=sm.return_loss_db(g), name="return loss",
-        line=dict(color=S.SERIES[0], width=2.5),
+        line=dict(color=P["SERIES"][0], width=2.5),
         hovertemplate="%{x:.4f} GHz<br>RL %{y:.2f} dB<extra></extra>"))
-    fig.add_hline(y=10, line=dict(color=S.SERIES[2], width=1.4, dash="dash"),
-                  annotation_text="10 dB", annotation_position="top left")
-    fig.add_vline(x=f0 / 1e9, line=dict(color=S.INK_MUTED, width=1, dash="dot"))
+    fig.add_hline(y=10, line=dict(color=P["C_TARGET"], width=1.4, dash="dash"),
+                  annotation_text="10 dB", annotation_position="top left",
+                  annotation_font_color=P["INK_SOFT"])
+    fig.add_vline(x=f0 / 1e9,
+                  line=dict(color=P["INK_MUTED"], width=1, dash="dot"))
     fig.update_layout(
         title=title, height=300, margin=dict(l=10, r=10, t=44, b=10),
-        paper_bgcolor=S.SURFACE, plot_bgcolor=S.SURFACE,
-        font=dict(color=S.INK, size=12), showlegend=False,
-        xaxis=dict(title="frequency (GHz)", gridcolor=S.GRID_MINOR,
+        paper_bgcolor=P["SURFACE"], plot_bgcolor=P["SURFACE"],
+        font=dict(color=P["INK"], size=12), showlegend=False,
+        xaxis=dict(title="frequency (GHz)", gridcolor=P["GRID_MINOR"],
                    zeroline=False),
-        yaxis=dict(title="return loss (dB)", gridcolor=S.GRID_MINOR,
+        yaxis=dict(title="return loss (dB)", gridcolor=P["GRID_MINOR"],
                    zeroline=False, autorange="reversed"),
     )
     st.plotly_chart(fig, width="stretch", config=PLOT_CFG,
@@ -220,7 +249,7 @@ def chart_for_trajectory(traj, title, show_unity=None, q_marks=None):
     Overlays default to the sidebar toggles; every trace is also clickable in
     the Plotly legend, so anything can be hidden without a rerun.
     """
-    f = SmithFigure(z0=z0, title=title, height=620)
+    f = SmithFigure(palette=P, z0=z0, title=title, height=620)
     if show_unity if show_unity is not None else show_unity_circles:
         f.unity_circles()
     for q in (q_marks if q_marks is not None
@@ -229,11 +258,11 @@ def chart_for_trajectory(traj, title, show_unity=None, q_marks=None):
     f.vswr_circle(sm.vswr(gL), name="load VSWR")
     pts = [Z / z0 for _, Z, _ in traj]
     labels = [lab for lab, _, _ in traj[1:]]
-    f.point(pts[0], "load", color=S.C_LOAD, size=13)
+    f.point(pts[0], "load", color=P["C_LOAD"], size=13)
     for i in range(len(pts) - 1):
         f.arc(pts[i], pts[i + 1], kind=traj[i + 1][2], name=labels[i])
-    f.point(pts[-1], "input", color=S.C_TARGET, size=13, symbol="star")
-    f.point(1 + 0j, "matched", color=S.INK_MUTED, size=8, symbol="x",
+    f.point(pts[-1], "input", color=P["C_TARGET"], size=13, symbol="star")
+    f.point(1 + 0j, "matched", color=P["INK_MUTED"], size=8, symbol="x",
             showlegend=False)
     return f
 
@@ -270,20 +299,20 @@ tab_explore, tab_match, tab_build, tab_line = st.tabs(
 with tab_explore:
     c1, c2 = st.columns([3, 2])
     with c1:
-        f = SmithFigure(z0=z0, title="the load, and where it goes with frequency")
+        f = SmithFigure(palette=P, z0=z0, title="the load, and where it goes with frequency")
         f.vswr_circle(sm.vswr(gL), name="VSWR at design freq")
         f.unity_circles()
         if load_kind != "Fixed Z":
             Zsw = load.Z(freqs)
-            f.locus(Zsw / z0, "load vs frequency", color=S.SERIES[0],
+            f.locus(Zsw / z0, "load vs frequency", color=P["SERIES"][0],
                     customdata=np.stack([
                         freqs / 1e9, Zsw.real, Zsw.imag,
                         sm.vswr(sm.gamma_from_Z(Zsw, z0))], axis=-1),
                     hovertemplate=("%{customdata[0]:.4f} GHz<br>"
                                    "Z = %{customdata[1]:.2f} %{customdata[2]:+.2f}j Ω"
                                    "<br>VSWR %{customdata[3]:.2f}<extra></extra>"))
-        f.point(zL, f"load @ {f0_ghz:g} GHz", color=S.C_LOAD, size=13)
-        f.point(1 + 0j, "matched", color=S.C_TARGET, size=10, symbol="x")
+        f.point(zL, f"load @ {f0_ghz:g} GHz", color=P["C_LOAD"], size=13)
+        f.point(1 + 0j, "matched", color=P["C_TARGET"], size=10, symbol="x")
         st.plotly_chart(f.fig, width="stretch", config=PLOT_CFG,
                         key="explore-smith")
     with c2:
@@ -536,18 +565,18 @@ with tab_line:
         st.caption(f"{sl:.4f} λ = {sl * lam0 * 1000:.3f} mm")
 
     with c1:
-        f = SmithFigure(z0=z0, title="rotation along the line")
+        f = SmithFigure(palette=P, z0=z0, title="rotation along the line")
         f.vswr_circle(sm.vswr(gL), name="lossless VSWR")
         d = np.linspace(0, max(d_wl, 1e-6), 400)
         gtrace = gL * np.exp(-2 * alpha_np * d) * np.exp(-1j * 4 * np.pi * d)
-        f.locus(sm.z_from_gamma(gtrace), "along the line", color=S.C_LINE,
+        f.locus(sm.z_from_gamma(gtrace), "along the line", color=P["C_LINE"],
                 arrows=3,
                 customdata=np.stack([d, d * lam0 * 1000], axis=-1),
                 hovertemplate=("%{customdata[0]:.4f} λ  "
                                "(%{customdata[1]:.2f} mm)<extra></extra>"))
-        f.point(zL, "load", color=S.C_LOAD, size=13)
-        f.point(z_in, "input", color=S.C_TARGET, size=13, symbol="star")
-        f.point(1 + 0j, "matched", color=S.INK_MUTED, size=8, symbol="x",
+        f.point(zL, "load", color=P["C_LOAD"], size=13)
+        f.point(z_in, "input", color=P["C_TARGET"], size=13, symbol="star")
+        f.point(1 + 0j, "matched", color=P["INK_MUTED"], size=8, symbol="x",
                 showlegend=False)
         st.plotly_chart(f.fig, width="stretch", config=PLOT_CFG,
                         key="line-smith")
