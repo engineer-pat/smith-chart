@@ -25,7 +25,6 @@ borderColor = "#bab9b1"
 dataframeBorderColor = "#bab9b1"
 dataframeHeaderBackgroundColor = "#f2f1ec"
 codeBackgroundColor = "#f2f1ec"
-chartCategoricalColors = ["#2a78d6", "#eb6834", "#1baf7a", "#4a3aa7"]
 
 [theme.dark]
 backgroundColor = "#1a1a19"
@@ -37,7 +36,6 @@ borderColor = "#4d4c47"
 dataframeBorderColor = "#4d4c47"
 dataframeHeaderBackgroundColor = "#242422"
 codeBackgroundColor = "#242422"
-chartCategoricalColors = ["#3987e5", "#d95926", "#199e70", "#9085e9"]
 
 [browser]
 gatherUsageStats = false

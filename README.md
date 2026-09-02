@@ -40,6 +40,43 @@ QUARTO_PYTHON=$PWD/.venv/bin/python quarto render docs/smith-chart.qmd
 > Quarto keeps a **persistent Jupyter kernel** between renders. If a render
 > behaves as though it is running stale code, add `--execute-daemon-restart`.
 
+## Deploying the app
+
+The repo is ready for [Streamlit Community Cloud](https://share.streamlit.io);
+the last step has to be done in a browser, since it is an OAuth flow that
+authorises Streamlit against your GitHub account.
+
+1. Go to <https://share.streamlit.io> and sign in with GitHub.
+2. **Create app → Deploy a public app from GitHub**.
+3. Fill in:
+
+   | Field | Value |
+   |---|---|
+   | Repository | `engineer-pat/smith-chart` |
+   | Branch | `main` |
+   | Main file path | `app/app.py` |
+
+   The local `streamlit run` **Deploy** button prefills the same three values,
+   which it reads from the repo's git remote. If it says there is no git
+   repository, the server was started before the remote existed — restart
+   `streamlit run` and it will pick it up.
+4. Under *Advanced settings*, pick Python 3.11 or newer.
+
+What the repo already provides:
+
+- **`requirements.txt` is the deployment manifest** and lists only what the app
+  imports at runtime — `numpy`, `plotly`, `streamlit`. It does not install the
+  package: `app/app.py` puts the repo root on `sys.path` and imports `smithlib`
+  directly. Nothing the app reaches touches matplotlib, so the deployed
+  environment is 38 packages / ~490 MB rather than the 125 packages / ~770 MB
+  that installing the docs and test tooling would pull in. Local development
+  uses the pyproject extras instead (`make venv`).
+- **`.streamlit/config.toml` is picked up on Cloud too**, so the deployed app
+  is themed exactly as it is locally.
+- **`streamlit>=1.51`** is the real floor: that is the release where
+  `st.plotly_chart` gained `width=`, which this app uses. Verified by running
+  the app against 1.51.
+
 ## Why it is laid out this way
 
 The math is deliberately separate from every user interface. `core`, `tline`,

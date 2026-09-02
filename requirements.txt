@@ -1,6 +1,14 @@
+# Deployment manifest for Streamlit Community Cloud, which installs this file
+# from the repo root. It is deliberately the *app's runtime* dependencies only
+# -- app/app.py puts the repo root on sys.path and imports smithlib directly,
+# so the package itself needs no install, and nothing the app reaches touches
+# matplotlib.
+#
+# For local work install the package with its extras instead, which adds the
+# docs and test tooling:
+#
+#     pip install -e ".[app,docs,dev]"        (or: make venv)
+
 numpy>=1.24
-matplotlib>=3.7
 plotly>=5.18
-streamlit>=1.30
-jupyter
-pytest>=7
+streamlit>=1.51  # 1.51 is where st.plotly_chart gained width=

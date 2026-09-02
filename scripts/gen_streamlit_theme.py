@@ -49,9 +49,14 @@ showWidgetBorder = true
 
 
 def block(name):
-    """The ``[theme.light]`` / ``[theme.dark]`` section for one palette."""
+    """The ``[theme.light]`` / ``[theme.dark]`` section for one palette.
+
+    Deliberately no ``chartCategoricalColors``: that key only themes
+    Streamlit's *native* charts, and every chart here is a Plotly figure
+    coloured explicitly from the palette. Setting it bought nothing and
+    warned on Streamlit older than 1.59.
+    """
     p = S.palette(name)
-    series = ", ".join(f'"{c}"' for c in p["SERIES"] + [p["ACCENT"]])
     return f"""
 [theme.{name}]
 backgroundColor = "{p['SURFACE']}"
@@ -63,7 +68,6 @@ borderColor = "{p['GRID_MAJOR']}"
 dataframeBorderColor = "{p['GRID_MAJOR']}"
 dataframeHeaderBackgroundColor = "{p['PANEL']}"
 codeBackgroundColor = "{p['PANEL']}"
-chartCategoricalColors = [{series}]
 """
 
 
